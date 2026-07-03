@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f4ee" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="RecallForge" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>RecallForge</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="stylesheet" href="styles.css?v=24" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="メイン">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">R</div>
+          <div>
+            <h1>RecallForge</h1>
+            <p>細かく育てる暗記</p>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="画面切り替え">
+          <button class="nav-tab is-active" data-route="study">学習</button>
+          <button class="nav-tab" data-route="cards">カード</button>
+          <button class="nav-tab" data-route="notion">Notion取込</button>
+          <button class="nav-tab" data-route="settings">設定</button>
+        </nav>
+
+        <div class="stats-panel">
+          <div>
+            <span class="stat-label">今日の復習</span>
+            <strong id="dueCount">0</strong>
+          </div>
+          <div>
+            <span class="stat-label">全カード</span>
+            <strong id="totalCount">0</strong>
+          </div>
+          <div>
+            <span class="stat-label">次回</span>
+            <strong id="nextDue">なし</strong>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="view is-active" id="view-study" aria-labelledby="studyTitle">
+          <header class="view-header">
+            <div>
+              <p class="eyebrow">Review</p>
+              <h2 id="studyTitle">学習</h2>
+            </div>
+            <div class="header-actions">
+              <select id="deckFilter" aria-label="デッキ">
+                <option value="all">すべてのデッキ</option>
+              </select>
+              <button class="ghost-button" id="practiceAnyButton">全カードから練習</button>
+            </div>
+          </header>
+
+          <div class="study-layout">
+            <article class="study-card" id="studyCard">
+              <div class="empty-state">
+                <h3>復習するカードはありません</h3>
+                <p>カードを追加するか、Notion取込から候補を作成してください。</p>
+                <button class="primary-button" data-route-button="notion">Notion取込へ</button>
+              </div>
+            </article>
+
+            <aside class="review-panel" aria-label="復習操作">
+              <div class="panel-section">
+                <h3>次に出す間隔</h3>
+                <div class="interval-grid" id="intervalButtons"></div>
+              </div>
+
+              <div class="panel-section">
+                <label for="customDateTime">日時指定</label>
+                <div class="inline-row">
+                  <input type="datetime-local" id="customDateTime" />
+                  <button class="secondary-button" id="scheduleCustomDate">設定</button>
+                </div>
+              </div>
+
+              <div class="panel-section">
+                <label for="customMinutes">分で指定</label>
+                <div class="inline-row">
+                  <input type="number" min="1" step="1" id="customMinutes" placeholder="例: 90" />
+                  <button class="secondary-button" id="scheduleCustomMinutes">設定</button>
+                </div>
+              </div>
+
+              <div class="panel-section danger-zone">
+                <button class="warning-button" id="editCurrentCard">カードを修正</button>
+                <button class="danger-button" id="deleteCurrentCard">このカードを削除</button>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="view-cards" aria-labelledby="cardsTitle">
+          <header class="view-header">
+            <div>
+              <p class="eyebrow">Library</p>
+              <h2 id="cardsTitle">カード管理</h2>
+            </div>
+            <div class="header-actions">
+              <input id="cardSearch" type="search" placeholder="検索" aria-label="カード検索" />
+              <button class="primary-button" id="newCardButton">新規カード</button>
+            </div>
+          </header>
+
+          <div class="split-layout cards-layout">
+            <section class="editor-panel card-editor-panel" aria-label="カード編集">
+              <form id="cardForm">
+                <input type="hidden" id="cardId" />
+                <div class="form-grid">
+                  <label>
+                    種類
+                    <select id="cardType">
+                      <option value="basic">通常カード</option>
+                      <option value="cloze">穴埋め</option>
+                    </select>
+                  </label>
+                  <label>
+                    デッキ
+                    <select id="cardDeck"></select>
+                  </label>
+                </div>
+                <label>
+                  表面 / 問題
+                  <textarea id="cardFront" rows="8" required></textarea>
+                </label>
+                <label>
+                  裏面 / 解説
+                  <textarea id="cardBack" rows="10" required></textarea>
+                </label>
+                <div class="card-image-actions">
+                  <button class="secondary-button" type="button" id="addBackImageButton">解説に画像を追加</button>
+                  <button class="secondary-button" type="button" id="pasteBackImageButton">コピー画像を貼り付け</button>
+                  <input type="file" id="cardBackImageFile" accept="image/*" hidden />
+                </div>
+                <div class="back-preview-panel" id="cardBackPreviewPanel" hidden>
+                  <div class="preview-label">解説プレビュー</div>
+                  <div class="back-preview" id="cardBackPreview"></div>
+                </div>
+                <label>
+                  タグ
+                  <input id="cardTags" type="text" placeholder="notion, 医学, 英語" />
+                </label>
+                <label>
+                  修正メモ
+                  <textarea id="editNote" rows="3" placeholder="なぜ直したかを残すと、次の自動生成の判断材料になります"></textarea>
+                </label>
+                <div class="form-actions">
+                  <button class="primary-button" type="submit">保存</button>
+                  <button class="ghost-button" type="button" id="clearFormButton">クリア</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="list-panel card-list-panel" aria-label="カード一覧">
+              <h3>保存済みカード</h3>
+              <div class="toolbar">
+                <button class="secondary-button" id="exportJsonButton">JSON書き出し</button>
+                <label class="file-button">
+                  取り込み
+                  <input type="file" id="importFile" accept=".json,.csv,text/csv,application/json" />
+                </label>
+              </div>
+              <div class="card-list" id="cardList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-notion" aria-labelledby="notionTitle">
+          <header class="view-header">
+            <div>
+              <p class="eyebrow">Generator</p>
+              <h2 id="notionTitle">Notion取込</h2>
+            </div>
+            <div class="header-actions">
+              <button class="secondary-button" id="loadSampleNote">サンプル</button>
+              <button class="primary-button" id="generateCards">候補を作成</button>
+            </div>
+          </header>
+
+          <div class="generator-layout">
+            <section class="editor-panel" aria-label="Notion本文">
+              <label>
+                Notionからコピーした本文
+                <textarea id="notionInput" rows="18" placeholder="見出し、箇条書き、表の内容などを貼り付け"></textarea>
+              </label>
+              <div class="form-grid">
+                <label>
+                  取り込み先デッキ
+                  <select id="notionDeck"></select>
+                </label>
+                <label>
+                  生成の厳しさ
+                  <select id="generationStrictness">
+                    <option value="balanced">標準</option>
+                    <option value="strict">重要項目だけ</option>
+                    <option value="wide">多めに作る</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                作らない語句
+                <input id="blockedTerms" type="text" placeholder="例: など, つまり, メモ" />
+              </label>
+            </section>
+
+            <section class="candidate-panel" aria-label="生成候補">
+              <div class="candidate-toolbar">
+                <strong id="candidateCount">候補 0件</strong>
+                <div>
+                  <button class="ghost-button" id="selectAllCandidates">すべて選択</button>
+                  <button class="primary-button" id="acceptCandidates">選択をカード化</button>
+                </div>
+              </div>
+              <div class="candidate-list" id="candidateList">
+                <div class="empty-state compact">
+                  <h3>候補はまだありません</h3>
+                  <p>Notion本文を貼り付けて候補を作成してください。</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-settings" aria-labelledby="settingsTitle">
+          <header class="view-header">
+            <div>
+              <p class="eyebrow">System</p>
+              <h2 id="settingsTitle">設定</h2>
+            </div>
+          </header>
+
+          <div class="settings-grid">
+            <section class="settings-section">
+              <h3>クラウド同期</h3>
+              <div class="sync-status" id="syncStatus">未設定</div>
+
+              <form id="cloudConfigForm" class="sync-form">
+                <div class="form-grid">
+                  <label>
+                    Supabase URL
+                    <input id="supabaseUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+                  </label>
+                  <label>
+                    公開キー
+                    <input id="supabaseAnonKey" type="password" placeholder="anon public key" autocomplete="off" />
+                  </label>
+                </div>
+                <div class="form-actions">
+                  <button class="secondary-button" type="submit">同期先を保存</button>
+                  <button class="ghost-button" type="button" id="cloudResetConfigButton">標準設定に戻す</button>
+                </div>
+              </form>
+
+              <form id="cloudAuthForm" class="sync-form">
+                <div class="form-grid">
+                  <label>
+                    メール
+                    <input id="cloudEmail" type="email" autocomplete="email" />
+                  </label>
+                  <label>
+                    パスワード
+                    <input id="cloudPassword" type="password" autocomplete="current-password" />
+                  </label>
+                </div>
+                <label class="checkbox-row">
+                  <input id="rememberCloudLogin" type="checkbox" checked />
+                  <span>ログイン成功後、この端末では次回から自動ログイン</span>
+                </label>
+                <p class="sync-memory" id="cloudMemoryStatus">自動ログイン: 未保存</p>
+                <div class="form-actions">
+                  <button class="primary-button" type="button" id="cloudSignInButton">ログイン</button>
+                  <button class="secondary-button" type="button" id="cloudSignUpButton">アカウント作成</button>
+                  <button class="ghost-button" type="button" id="cloudSignOutButton">ログアウト</button>
+                </div>
+              </form>
+
+              <div class="sync-actions">
+                <button class="primary-button" type="button" id="cloudSyncButton">今すぐ同期</button>
+                <button class="secondary-button" type="button" id="cloudUploadButton">この端末を保存</button>
+                <button class="secondary-button" type="button" id="cloudDownloadButton">クラウドから取り込み</button>
+              </div>
+              <p class="sync-note">ログイン中は、カード作成・復習・編集・削除を自動で同期します。別端末の変更もアプリ表示中に自動で取り込みます。</p>
+            </section>
+
+            <section class="settings-section">
+              <h3>デッキ管理</h3>
+              <form id="deckForm" class="deck-form">
+                <label>
+                  新しいデッキ
+                  <div class="inline-row">
+                    <input id="newDeckName" type="text" placeholder="医療、IT関連、AI関連" />
+                    <button class="primary-button" type="submit">デッキ作成</button>
+                  </div>
+                </label>
+              </form>
+              <div class="deck-list" id="deckList"></div>
+            </section>
+            <section class="settings-section">
+              <h3>復習間隔プリセット</h3>
+              <div id="presetEditor"></div>
+              <button class="secondary-button" id="addPreset">プリセット追加</button>
+            </section>
+            <section class="settings-section">
+              <h3>生成フィードバック</h3>
+              <dl class="feedback-list">
+                <div>
+                  <dt>修正履歴</dt>
+                  <dd id="editHistoryCount">0件</dd>
+                </div>
+                <div>
+                  <dt>削除された自動生成カード</dt>
+                  <dd id="deletedGeneratedCount">0件</dd>
+                </div>
+              </dl>
+              <button class="danger-button" id="resetDataButton">全データを消去</button>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="update-banner" id="updateBanner" hidden>
+      <span>新しいバージョンがあります</span>
+      <button class="primary-button" id="reloadUpdateButton" type="button">更新</button>
+    </div>
+
+    <dialog id="messageDialog">
+      <form method="dialog">
+        <h3 id="dialogTitle">通知</h3>
+        <p id="dialogMessage"></p>
+        <button class="primary-button">閉じる</button>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
+    <script src="cloud-config.js"></script>
+    <script src="main.js?v=24"></script>
+  </body>
+</html>
