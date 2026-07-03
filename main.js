@@ -2286,6 +2286,8 @@ function serializeAppState(input) {
 
 function applySyncedState(nextState) {
   suppressCloudAutoSync = true;
+  const previousStudyCardId = currentStudyCardId;
+  const previousAnswerVisible = answerVisible;
   state = normalizeLoadedState({
     ...createDefaultState(),
     ...nextState,
@@ -2294,8 +2296,18 @@ function applySyncedState(nextState) {
       ...(nextState.settings || {})
     }
   });
-  currentStudyCardId = null;
-  answerVisible = false;
+  // 学習中のカードが同期後も残っていれば、表示中の答えを維持する。
+  // これがないとバックグラウンド同期のたびに答えが閉じてしまう。
+  const survivingCard = previousStudyCardId
+    ? state.cards.find((card) => card.id === previousStudyCardId && card.status === "active")
+    : null;
+  if (survivingCard) {
+    currentStudyCardId = survivingCard.id;
+    answerVisible = previousAnswerVisible;
+  } else {
+    currentStudyCardId = null;
+    answerVisible = false;
+  }
   saveState();
   suppressCloudAutoSync = false;
 }
