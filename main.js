@@ -1,4 +1,5 @@
 const STORAGE_KEY = "recallforge-state-v1";
+const STUDY_SESSION_KEY = "recallforge-study-session-v1";
 const CLOUD_CONFIG_KEY = "recallforge-cloud-config-v1";
 const CLOUD_LAST_SYNC_KEY = "recallforge-cloud-last-sync-v1";
 const CLOUD_DEVICE_KEY = "recallforge-cloud-device-v1";
@@ -65,6 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindElements();
   bindEvents();
   ensureInitialCards();
+  restoreStudySession();
   renderAll();
   initCloudSync();
   registerServiceWorker();
@@ -433,6 +435,7 @@ function renderStudy() {
   const queue = getStudyQueue(false);
   const card = current && current.status === "active" ? current : queue[0];
   currentStudyCardId = card ? card.id : null;
+  saveStudySession();
 
   if (!card) {
     els.studyCard.innerHTML = `
@@ -467,6 +470,36 @@ function renderStudy() {
     answerVisible = !answerVisible;
     renderStudy();
   });
+}
+
+// 学習中のカードと「答え表示中」の状態を端末に保存する。
+// iOSが数分でページを再読み込みしても、開いていた答えを復元できるようにするため。
+function saveStudySession() {
+  try {
+    if (currentStudyCardId) {
+      localStorage.setItem(
+        STUDY_SESSION_KEY,
+        JSON.stringify({ cardId: currentStudyCardId, answerVisible })
+      );
+    } else {
+      localStorage.removeItem(STUDY_SESSION_KEY);
+    }
+  } catch {
+    // localStorageが使えない環境では保存をあきらめる（動作には影響しない）。
+  }
+}
+
+function restoreStudySession() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STUDY_SESSION_KEY) || "null");
+    if (!parsed || typeof parsed.cardId !== "string") return;
+    const card = state.cards.find((item) => item.id === parsed.cardId && item.status === "active");
+    if (!card) return;
+    currentStudyCardId = card.id;
+    answerVisible = Boolean(parsed.answerVisible);
+  } catch {
+    // 復元に失敗しても通常の初期表示にフォールバックするだけ。
+  }
 }
 
 function renderCardList() {
