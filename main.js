@@ -975,10 +975,20 @@ function hasBackPreviewContent(value) {
 }
 
 function compactImageDataUrls(value) {
-  return String(value || "").replace(
+  let text = String(value || "");
+  // まずMarkdown画像記法（![...](data:...)）に埋め込まれたデータURLを短い参照に置き換える。
+  text = text.replace(
     /!\[([^\]\n]{0,80})\]\((data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+)\)/g,
     (_match, alt, dataUrl) => `![${alt || "解説画像"}](${createCardImageReference(dataUrl)})`
   );
+  // パソコンからの貼り付けなどで、記法に囲まれていない「生のデータURL」（長い文字列）が
+  // そのまま入ってしまった場合も、画像として扱えるよう参照に変換する。
+  // 直前が "(" のもの（＝上の変換で残った記法内）は対象外にして二重変換を防ぐ。
+  text = text.replace(
+    /(^|[^(])(data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+)/g,
+    (_match, prefix, dataUrl) => `${prefix}![解説画像](${createCardImageReference(dataUrl)})`
+  );
+  return text;
 }
 
 function setBackImageBusy(isBusy) {
