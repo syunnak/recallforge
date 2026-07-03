@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "RecallForge",
+  "short_name": "RecallForge",
+  "description": "細かく復習間隔を調整できる暗記アプリ",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f4ee",
+  "theme_color": "#f7f4ee",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
