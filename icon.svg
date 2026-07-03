@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RecallForge">
+  <rect width="512" height="512" rx="96" fill="#246b5f"/>
+  <path fill="#fffdf8" d="M156 134h126c58 0 94 32 94 82 0 36-19 63-54 76l67 86h-73l-58-76h-42v76h-60V134Zm60 51v69h61c24 0 38-13 38-35 0-21-14-34-38-34h-61Z"/>
+  <path fill="#f3ded4" d="M134 408h244v34H134z"/>
+</svg>
