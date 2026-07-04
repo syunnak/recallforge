@@ -1,5 +1,7 @@
 const STORAGE_KEY = "recallforge-state-v1";
 const STUDY_SESSION_KEY = "recallforge-study-session-v1";
+const BACKUP_LAST_AUTO_KEY = "recallforge-backup-last-auto-v1";
+const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const CLOUD_CONFIG_KEY = "recallforge-cloud-config-v1";
 const CLOUD_LAST_SYNC_KEY = "recallforge-cloud-last-sync-v1";
 const CLOUD_DEVICE_KEY = "recallforge-cloud-device-v1";
@@ -69,6 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
   restoreStudySession();
   renderAll();
   initCloudSync();
+  runDailyAutoBackup();
   registerServiceWorker();
 });
 
@@ -1123,6 +1126,63 @@ function inlineStoredImageReferences(value) {
   );
 }
 
+// 全データ（カード・学習履歴・修正履歴・画像・設定）を1つにまとめたバックアップを作る。
+function buildBackupPayload() {
+  return {
+    app: "RecallForge",
+    recallforgeBackup: true,
+    backupVersion: 1,
+    exportedAt: new Date().toISOString(),
+    state: serializeAppState(state)
+  };
+}
+
+function downloadFullBackup() {
+  const payload = JSON.stringify(buildBackupPayload(), null, 2);
+  const blob = new Blob([payload], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `recallforge-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+// 1日1回、パソコン（デスクトップ）でアプリを開いたときに全データを自動ダウンロードする。
+// スマホやインストール済みPWAでは自動ダウンロードしない（Macにバックアップをためる想定）。
+function runDailyAutoBackup() {
+  try {
+    if (!isLikelyDesktopBrowser()) return;
+    const last = Number(localStorage.getItem(BACKUP_LAST_AUTO_KEY) || 0);
+    if (Number.isFinite(last) && Date.now() - last < BACKUP_INTERVAL_MS) return;
+    downloadFullBackup();
+    localStorage.setItem(BACKUP_LAST_AUTO_KEY, String(Date.now()));
+  } catch {
+    // 自動バックアップに失敗しても、アプリ本体の動作は妨げない。
+  }
+}
+
+function isLikelyDesktopBrowser() {
+  try {
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+    const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches;
+    return !standalone && !coarsePointer;
+  } catch {
+    return false;
+  }
+}
+
+// バックアップファイルの内容で、カードと学習履歴を丸ごと復元する。
+// 既存データがあっても失われないよう、新しい方を優先してマージする。
+function restoreFullBackup(backupState) {
+  const restored = mergeAppStates(state, backupState);
+  applySyncedState(restored);
+  renderAll();
+}
+
 function handleImportFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -1130,7 +1190,19 @@ function handleImportFile(event) {
   reader.onload = () => {
     try {
       const text = String(reader.result || "");
-      const imported = file.name.toLowerCase().endsWith(".csv") ? parseCsvCards(text) : parseJsonCards(text);
+      const isCsv = file.name.toLowerCase().endsWith(".csv");
+      const backupState = isCsv ? null : extractBackupState(text);
+      if (backupState) {
+        const before = getActiveCards().length;
+        restoreFullBackup(backupState);
+        const after = getActiveCards().length;
+        showMessage(
+          "バックアップから復元しました",
+          `カード・学習履歴・設定を復元しました（カード ${after}件${after > before ? `／新たに ${after - before}件追加` : ""}）。`
+        );
+        return;
+      }
+      const imported = isCsv ? parseCsvCards(text) : parseJsonCards(text);
       imported.forEach((card) => state.cards.push(makeCard(card)));
       persistAndRender();
       showMessage("取り込みました", `${imported.length}件のカードを追加しました。`);
@@ -1141,6 +1213,29 @@ function handleImportFile(event) {
     }
   };
   reader.readAsText(file);
+}
+
+// 取り込みファイルが「全体バックアップ」かどうかを判定し、その中の状態を返す。
+// 単なるカード配列や {cards:[...]} だけの旧形式は対象外（従来どおりカード追加として扱う）。
+function extractBackupState(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (parsed.recallforgeBackup && parsed.state && typeof parsed.state === "object") {
+    return parsed.state;
+  }
+  const looksLikeFullState =
+    Array.isArray(parsed.cards) &&
+    (Array.isArray(parsed.reviews) ||
+      Array.isArray(parsed.editHistory) ||
+      Array.isArray(parsed.deletedGenerated) ||
+      (parsed.settings && typeof parsed.settings === "object") ||
+      (parsed.assets && typeof parsed.assets === "object"));
+  return looksLikeFullState ? parsed : null;
 }
 
 function parseJsonCards(text) {
