@@ -402,6 +402,118 @@ textarea {
   color: var(--primary-strong);
 }
 
+/* ChatGPTなどから貼り付けたMarkdownの表示 */
+.rich-body {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.rich-body > *:first-child {
+  margin-top: 0;
+}
+
+.rich-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.rich-p {
+  margin: 0 0 14px;
+  line-height: 1.72;
+}
+
+.rich-h {
+  margin: 24px 0 12px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.rich-h1 {
+  font-size: 1.5rem;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--line);
+}
+
+.rich-h2 {
+  font-size: 1.3rem;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rich-h3 {
+  font-size: 1.14rem;
+}
+
+.rich-h4,
+.rich-h5,
+.rich-h6 {
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+.rich-list {
+  margin: 0 0 14px;
+  padding-left: 1.55em;
+  line-height: 1.72;
+}
+
+.rich-list .rich-list {
+  margin: 6px 0 6px;
+}
+
+.rich-list li {
+  margin: 4px 0;
+}
+
+.rich-list ul {
+  list-style: circle;
+}
+
+.rich-quote {
+  margin: 0 0 14px;
+  padding: 6px 16px;
+  border-left: 4px solid var(--primary-soft, var(--line));
+  background: var(--surface-strong, rgba(0, 0, 0, 0.03));
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.rich-quote > *:last-child {
+  margin-bottom: 0;
+}
+
+.rich-hr {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.rich-code {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: #1f2430;
+  color: #f4f4f4;
+  border-radius: var(--radius);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rich-code code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre;
+}
+
+.rich-inline-code {
+  padding: 1px 6px;
+  background: var(--surface-strong, rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  overflow-wrap: anywhere;
+}
+
 .answer-label {
   display: block;
   margin-bottom: 8px;

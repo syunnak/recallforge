@@ -972,8 +972,24 @@ function updateCardBackPreview() {
 function hasBackPreviewContent(value) {
   const text = String(value || "");
   return (
+    // 画像
     /!\[[^\]\n]{0,80}]\((?:data:image\/|https?:\/\/|recallforge-image:)/.test(text) ||
-    /(^|\n)\s*\|.+\|\s*\n\s*\|?[\s:|-]{3,}\|/.test(text)
+    // 表
+    /(^|\n)\s*\|.+\|\s*\n\s*\|?[\s:|-]{3,}\|/.test(text) ||
+    // 見出し
+    /(^|\n)#{1,6}\s+\S/.test(text) ||
+    // 箇条書き・番号付きリスト
+    /(^|\n)\s*(?:[-*+]|\d+[.)])\s+\S/.test(text) ||
+    // 引用
+    /(^|\n)\s*>\s+\S/.test(text) ||
+    // コードブロック
+    /(^|\n)\s*(?:`{3,}|~{3,})/.test(text) ||
+    // 太字・インラインコード
+    /\*\*[^*\n]+\*\*/.test(text) ||
+    /`[^`\n]+`/.test(text) ||
+    // リンク・参照リンク定義
+    /\[[^\]\n]+]\((?:https?:)/.test(text) ||
+    /(^|\n)\s*\[[^\]\n]+]:\s*<?https?:/.test(text)
   );
 }
 
@@ -1515,7 +1531,9 @@ function renderRichText(value) {
     match = pattern.exec(text);
   }
 
-  return html + renderTextBlock(text.slice(cursor), references);
+  html += renderTextBlock(text.slice(cursor), references);
+  if (!html) return "";
+  return `<div class="rich-body">${html}</div>`;
 }
 
 function resolveImageSource(value) {
@@ -1530,30 +1548,174 @@ function resolveImageSource(value) {
   return normalizeReferenceUrl(source);
 }
 
+// ChatGPTなどから貼り付けたMarkdownを、見出し・箇条書き・番号付き・引用・区切り線・
+// コードブロック・表・段落といったブロック単位で解釈してHTMLに整える。
 function renderTextBlock(value, references = new Map()) {
   const lines = String(value || "").split("\n");
   let html = "";
-  let plainLines = [];
+  let paragraph = [];
+  let index = 0;
 
-  const flushPlainLines = () => {
-    if (plainLines.length === 0) return;
-    html += renderInlineMarkdown(plainLines.join("\n"), references);
-    plainLines = [];
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    const inner = paragraph.map((line) => renderInlineMarkdown(line, references)).join("<br />");
+    html += `<p class="rich-p">${inner}</p>`;
+    paragraph = [];
   };
 
-  for (let index = 0; index < lines.length; index += 1) {
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    // 空行は段落の区切り
+    if (trimmed === "") {
+      flushParagraph();
+      index += 1;
+      continue;
+    }
+
+    // 参照リンクの定義行（[1]: https://... "タイトル"）は表示せず、リンク解決のみに使う
+    if (parseReferenceDefinition(line)) {
+      flushParagraph();
+      index += 1;
+      continue;
+    }
+
+    // ```／~~~ で囲まれたコードブロック
+    const fence = trimmed.match(/^(`{3,}|~{3,})/);
+    if (fence) {
+      flushParagraph();
+      const marker = fence[1][0];
+      const closing = new RegExp(`^\\s*\\${marker}{3,}\\s*$`);
+      const codeLines = [];
+      index += 1;
+      while (index < lines.length && !closing.test(lines[index])) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      index += 1; // 閉じフェンスを飛ばす
+      html += `<pre class="rich-code"><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`;
+      continue;
+    }
+
+    // 表（既存のMarkdownテーブル）
     if (isMarkdownTableStart(lines, index)) {
-      flushPlainLines();
+      flushParagraph();
       const table = collectMarkdownTable(lines, index);
       html += renderMarkdownTable(table, references);
-      index = table.endIndex;
-    } else {
-      plainLines.push(lines[index]);
+      index = table.endIndex + 1;
+      continue;
     }
+
+    // 見出し（# ～ ######）
+    const heading = trimmed.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if (heading && heading[2]) {
+      flushParagraph();
+      const level = heading[1].length;
+      html += `<h${level} class="rich-h rich-h${level}">${renderInlineMarkdown(heading[2], references)}</h${level}>`;
+      index += 1;
+      continue;
+    }
+
+    // 区切り線（---, ***, ___）。表の区切り行（| を含む）は除外
+    if (!line.includes("|") && /^\s*([-*_])\s*(?:\1\s*){2,}$/.test(line)) {
+      flushParagraph();
+      html += `<hr class="rich-hr" />`;
+      index += 1;
+      continue;
+    }
+
+    // 引用（> ）。連続する行をまとめて1つの引用にする
+    if (/^\s*>\s?/.test(line)) {
+      flushParagraph();
+      const quoteLines = [];
+      while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^\s*>\s?/, ""));
+        index += 1;
+      }
+      html += `<blockquote class="rich-quote">${renderTextBlock(quoteLines.join("\n"), references)}</blockquote>`;
+      continue;
+    }
+
+    // 箇条書き・番号付きリスト（入れ子対応）
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
+      flushParagraph();
+      const list = renderMarkdownList(lines, index, references);
+      html += list.html;
+      index = list.next;
+      continue;
+    }
+
+    // それ以外は段落として蓄積
+    paragraph.push(line);
+    index += 1;
   }
 
-  flushPlainLines();
+  flushParagraph();
   return html;
+}
+
+// インデント量に基づいて入れ子のリストを解釈する。
+function renderMarkdownList(lines, start, references) {
+  const listItemPattern = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+
+  const parse = (from, indent) => {
+    let out = "";
+    let items = "";
+    let currentType = null;
+    let cursor = from;
+
+    const closeList = () => {
+      if (!currentType) return;
+      out += `<${currentType} class="rich-list">${items}</${currentType}>`;
+      items = "";
+      currentType = null;
+    };
+
+    while (cursor < lines.length) {
+      const line = lines[cursor];
+      if (line.trim() === "") {
+        // 空行の先にリストの続きがあれば継続、なければ終了
+        let peek = cursor + 1;
+        while (peek < lines.length && lines[peek].trim() === "") peek += 1;
+        const peekMatch = peek < lines.length ? lines[peek].match(listItemPattern) : null;
+        if (peekMatch && peekMatch[1].length >= indent) {
+          cursor = peek;
+          continue;
+        }
+        break;
+      }
+
+      const match = line.match(listItemPattern);
+      if (!match || match[1].length < indent) break;
+      if (match[1].length > indent) break; // 呼び出し元が処理する深い階層
+
+      const type = /\d/.test(match[2]) ? "ol" : "ul";
+      if (currentType && currentType !== type) closeList();
+      currentType = type;
+
+      const content = match[3];
+      cursor += 1;
+
+      // 直後に続く、より深いインデントの項目は入れ子リストにする
+      let nested = "";
+      const nextMatch = cursor < lines.length ? lines[cursor].match(listItemPattern) : null;
+      if (nextMatch && nextMatch[1].length > indent) {
+        const child = parse(cursor, nextMatch[1].length);
+        nested = child.html;
+        cursor = child.next;
+      }
+
+      items += `<li>${renderInlineMarkdown(content, references)}${nested}</li>`;
+    }
+
+    closeList();
+    return { html: out, next: cursor };
+  };
+
+  const baseIndent = (lines[start].match(/^(\s*)/)[1] || "").length;
+  const result = parse(start, baseIndent);
+  return { html: result.html, next: result.next };
 }
 
 function isMarkdownTableStart(lines, index) {
@@ -1646,7 +1808,7 @@ function parseTableAlignment(value) {
 
 function renderInlineMarkdown(value, references = new Map()) {
   const text = String(value || "");
-  const pattern = /\*\*([^*\n]+?)\*\*|\[([^\]\n]{1,120})]\((https?:\/\/[^\s)]+)\)|\[([^\]\n]{1,120})]\[([^\]\n]{1,80})]|(https?:\/\/[^\s<>"']+)/g;
+  const pattern = /`([^`\n]+)`|\*\*([^*\n]+?)\*\*|\*([^*\n]+?)\*|\[([^\]\n]{1,120})]\((https?:\/\/[^\s)]+)\)|\[([^\]\n]{1,120})]\[([^\]\n]{1,80})]|(https?:\/\/[^\s<>"']+)/g;
   let cursor = 0;
   let html = "";
   let match = pattern.exec(text);
@@ -1654,20 +1816,24 @@ function renderInlineMarkdown(value, references = new Map()) {
   while (match) {
     html += escapeHtml(text.slice(cursor, match.index));
     if (match[1]) {
-      html += `<strong>${escapeHtml(match[1])}</strong>`;
-    } else if (match[2] && match[3]) {
-      const href = normalizeReferenceUrl(match[3]);
-      html += href
-        ? `<a class="reference-link" href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(match[2])}</a>`
-        : escapeHtml(match[0]);
+      html += `<code class="rich-inline-code">${escapeHtml(match[1])}</code>`;
+    } else if (match[2]) {
+      html += `<strong>${escapeHtml(match[2])}</strong>`;
+    } else if (match[3]) {
+      html += `<em>${escapeHtml(match[3])}</em>`;
     } else if (match[4] && match[5]) {
-      const reference = references.get(normalizeReferenceId(match[5]));
+      const href = normalizeReferenceUrl(match[5]);
+      html += href
+        ? `<a class="reference-link" href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(match[4])}</a>`
+        : escapeHtml(match[0]);
+    } else if (match[6] && match[7]) {
+      const reference = references.get(normalizeReferenceId(match[7]));
       const title = reference?.title ? ` title="${escapeAttribute(reference.title)}"` : "";
       html += reference?.url
-        ? `<a class="reference-link" href="${escapeAttribute(reference.url)}" target="_blank" rel="noopener noreferrer"${title}>${escapeHtml(match[4])}</a>`
+        ? `<a class="reference-link" href="${escapeAttribute(reference.url)}" target="_blank" rel="noopener noreferrer"${title}>${escapeHtml(match[6])}</a>`
         : escapeHtml(match[0]);
     } else {
-      const { url, trailing } = splitTrailingUrlPunctuation(match[6]);
+      const { url, trailing } = splitTrailingUrlPunctuation(match[8]);
       const href = normalizeReferenceUrl(url);
       html += href
         ? `<a class="reference-link" href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>${escapeHtml(trailing)}`
