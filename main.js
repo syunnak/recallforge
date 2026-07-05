@@ -86,6 +86,7 @@ function bindElements() {
     nextDue: document.getElementById("nextDue"),
     deckFilter: document.getElementById("deckFilter"),
     practiceAnyButton: document.getElementById("practiceAnyButton"),
+    shuffleToggle: document.getElementById("shuffleToggle"),
     studyCard: document.getElementById("studyCard"),
     intervalButtons: document.getElementById("intervalButtons"),
     customDateTime: document.getElementById("customDateTime"),
@@ -171,12 +172,21 @@ function bindEvents() {
   });
 
   els.practiceAnyButton.addEventListener("click", () => {
-    const card = getStudyQueue(true)[0];
+    const card = pickNextCard(getStudyQueue(true));
     if (card) {
       currentStudyCardId = card.id;
       answerVisible = false;
       renderStudy();
     }
+  });
+
+  els.shuffleToggle?.addEventListener("change", () => {
+    state.settings.shuffle = els.shuffleToggle.checked;
+    saveState();
+    // 切り替えた効果がすぐ分かるよう、今のカードを解除して次を選び直す。
+    currentStudyCardId = null;
+    answerVisible = false;
+    renderStudy();
   });
 
   els.scheduleCustomDate.addEventListener("click", () => {
@@ -278,7 +288,8 @@ function createDefaultState() {
     settings: {
       presets: DEFAULT_PRESETS.map((preset) => ({ ...preset })),
       decks: [...DEFAULT_DECKS],
-      blockedTerms: []
+      blockedTerms: [],
+      shuffle: false
     }
   };
 }
@@ -435,9 +446,10 @@ function renderIntervals() {
 }
 
 function renderStudy() {
+  if (els.shuffleToggle) els.shuffleToggle.checked = Boolean(state.settings.shuffle);
   const current = getCard(currentStudyCardId);
   const queue = getStudyQueue(false);
-  const card = current && current.status === "active" ? current : queue[0];
+  const card = current && current.status === "active" ? current : pickNextCard(queue);
   currentStudyCardId = card ? card.id : null;
   saveStudySession();
 
@@ -716,6 +728,14 @@ function getStudyQueue(includeFuture) {
     .filter((card) => deck === "all" || card.deck === deck)
     .filter((card) => includeFuture || isDue(card))
     .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+}
+
+// 次に出すカードを選ぶ。シャッフルがオンなら、作った順（＝期限順）ではなく
+// キューの中からランダムに1枚を選ぶので、作成時の文脈で答えが分かってしまうのを防げる。
+function pickNextCard(queue) {
+  if (!queue.length) return null;
+  if (state.settings.shuffle) return queue[Math.floor(Math.random() * queue.length)];
+  return queue[0];
 }
 
 function isDue(card) {

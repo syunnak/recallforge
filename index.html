@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=31" />
+    <link rel="stylesheet" href="styles.css?v=32" />
   </head>
   <body>
     <div class="app-shell">
@@ -60,6 +60,10 @@
               <select id="deckFilter" aria-label="デッキ">
                 <option value="all">すべてのデッキ</option>
               </select>
+              <label class="shuffle-toggle" title="カードをランダムな順で出します">
+                <input type="checkbox" id="shuffleToggle" />
+                <span>シャッフル</span>
+              </label>
               <button class="ghost-button" id="practiceAnyButton">全カードから練習</button>
             </div>
           </header>
@@ -347,6 +351,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
     <script src="cloud-config.js"></script>
-    <script src="main.js?v=31"></script>
+    <script src="main.js?v=32"></script>
   </body>
 </html>
