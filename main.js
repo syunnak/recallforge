@@ -7,6 +7,7 @@ const CLOUD_LAST_SYNC_KEY = "recallforge-cloud-last-sync-v1";
 const CLOUD_DEVICE_KEY = "recallforge-cloud-device-v1";
 const CLOUD_REMEMBERED_LOGIN_KEY = "recallforge-cloud-remembered-login-v1";
 const CLOUD_TABLE = "recallforge_sync";
+const CLOUD_SPACE_TABLE = "recallforge_space";
 const CLOUD_LOCAL_SYNC_DELAY_MS = 700;
 const CLOUD_AUTO_PULL_INTERVAL_MS = 30000;
 const CLOUD_RESUME_SYNC_THROTTLE_MS = 8000;
@@ -2076,6 +2077,23 @@ function deckKey(value) {
   return normalizeDeckName(value).toLocaleLowerCase("ja-JP");
 }
 
+// ログイン不要モードで使う固定の同期キー。cloud-config.js に spaceId があれば有効。
+function getCloudSpaceId() {
+  return normalizeText(window.RECALLFORGE_SUPABASE?.spaceId || "");
+}
+
+// ログイン不要モードでは、ログイン欄や同期先設定欄を隠して画面を簡潔にする。
+function applyPasswordlessCloudUI() {
+  ["cloudConfigForm", "cloudAuthForm", "cloudUploadButton", "cloudDownloadButton"].forEach((id) => {
+    document.getElementById(id)?.setAttribute("hidden", "");
+  });
+}
+
+// spaceId が設定されていれば「ログインなしで自動同期する」モードになる。
+function isPasswordlessCloud() {
+  return Boolean(getCloudSpaceId());
+}
+
 function initCloudSync() {
   renderCloudConfigInputs();
   renderCloudLoginInputs();
@@ -2083,6 +2101,14 @@ function initCloudSync() {
   cloudClient = createCloudClient();
   renderCloudStatus();
   if (!cloudClient) return;
+
+  // ログイン不要モード：認証を使わず、起動と同時に自動同期を始める。
+  if (isPasswordlessCloud()) {
+    applyPasswordlessCloudUI();
+    startCloudPeriodicSync();
+    queueCloudAutoSync(300);
+    return;
+  }
 
   cloudAuthSubscription?.unsubscribe?.();
   const authListener = cloudClient.auth.onAuthStateChange((_event, session) => {
@@ -2257,6 +2283,18 @@ function renderCloudStatus() {
   }
   if (!window.supabase?.createClient) {
     setCloudStatus("同期ライブラリを読み込めません。通信環境を確認してください。", "error");
+    return;
+  }
+  if (isPasswordlessCloud()) {
+    if (!cloudClient) {
+      setCloudStatus("同期の準備中です。", "");
+      return;
+    }
+    const lastSyncAt = localStorage.getItem(CLOUD_LAST_SYNC_KEY);
+    setCloudStatus(
+      `自動同期: 有効（ログイン不要）${lastSyncAt ? ` / 最終同期 ${formatDateTime(lastSyncAt)}` : ""}`,
+      "online"
+    );
     return;
   }
   if (!cloudClient) {
@@ -2441,7 +2479,9 @@ function forgetRememberedCloudCredentials() {
 }
 
 function queueCloudAutoSync(delay = 1500) {
-  if (suppressCloudAutoSync || !cloudClient || !cloudSession?.user) return;
+  if (suppressCloudAutoSync || !cloudClient) return;
+  // ログイン不要モードでは常に同期可。通常モードではログイン済みのときだけ。
+  if (!isPasswordlessCloud() && !cloudSession?.user) return;
   window.clearTimeout(cloudAutoSyncTimer);
   cloudAutoSyncTimer = window.setTimeout(() => {
     syncCloud({ mode: "merge", silent: true });
@@ -2465,11 +2505,11 @@ async function runCloudSync({ mode, silent = false }) {
   try {
     clearCloudError();
     const client = requireCloudClient();
-    const user = await getCloudUser(client);
+    const owner = await resolveCloudOwner(client);
     cloudBusy = true;
     renderCloudStatus();
 
-    const remoteState = await fetchCloudState(client, user.id);
+    const remoteState = await fetchCloudState(client, owner);
     if (mode === "download") {
       if (!remoteState) throw new Error("クラウド側に同期データがまだありません。");
       applySyncedState(mergeAppStates(state, remoteState));
@@ -2479,7 +2519,7 @@ async function runCloudSync({ mode, silent = false }) {
       // 別ブラウザで開いた直後でも、クラウドのカードを誤って上書きすることはない。
       const merged = remoteState ? mergeAppStates(state, remoteState) : serializeAppState(state);
       applySyncedState(merged);
-      await upsertCloudStateSafely(client, user.id, serializeAppState(state), remoteState);
+      await upsertCloudStateSafely(client, owner, serializeAppState(state), remoteState);
     }
 
     localStorage.setItem(CLOUD_LAST_SYNC_KEY, new Date().toISOString());
@@ -2499,6 +2539,14 @@ async function runCloudSync({ mode, silent = false }) {
 
 function getFriendlyCloudErrorMessage(error) {
   const message = error?.message || "同期設定を確認してください。";
+  if (
+    message.includes(CLOUD_SPACE_TABLE) ||
+    message.includes("schema cache") ||
+    message.includes("does not exist") ||
+    message.includes("relation")
+  ) {
+    return "同期用のテーブルがまだ用意されていません。Supabaseの管理画面で初期設定SQLを1回だけ実行してください（手順はアプリの案内を参照）。実行後は自動で同期されます。";
+  }
   if (isInvalidApiKeyError(error)) {
     return "iPhoneに保存されているSupabase公開キーが違います。標準設定に戻したので、もう一度ログインを押してください。";
   }
@@ -2537,11 +2585,29 @@ async function getCloudUser(client) {
   return data.user;
 }
 
-async function fetchCloudState(client, userId) {
+// 同期の宛先を決める。spaceId があればログイン不要の共有キー、なければログインユーザー。
+async function resolveCloudOwner(client) {
+  if (isPasswordlessCloud()) {
+    return { kind: "space", key: getCloudSpaceId() };
+  }
+  const user = await getCloudUser(client);
+  return { kind: "user", key: user.id };
+}
+
+async function fetchCloudState(client, owner) {
+  if (owner.kind === "space") {
+    const { data, error } = await client
+      .from(CLOUD_SPACE_TABLE)
+      .select("state")
+      .eq("space_id", owner.key)
+      .limit(1);
+    if (error) throw error;
+    return data?.[0]?.state || null;
+  }
   const { data, error } = await client
     .from(CLOUD_TABLE)
     .select("state")
-    .eq("user_id", userId)
+    .eq("user_id", owner.key)
     .limit(1);
   if (error) throw error;
   return data?.[0]?.state || null;
@@ -2551,7 +2617,7 @@ async function fetchCloudState(client, userId) {
 // 正常なマージはリモートの全カード（削除済みの記録も含む）を必ず引き継ぐため、
 // 書き込むカードの記録件数がリモートより減ることはない。もし減っているなら
 // 何らかの異常なので、クラウドのデータを守るために書き込みを中止する。
-async function upsertCloudStateSafely(client, userId, payload, remoteState) {
+async function upsertCloudStateSafely(client, owner, payload, remoteState) {
   const remoteCards = Array.isArray(remoteState?.cards) ? remoteState.cards.length : 0;
   const nextCards = Array.isArray(payload?.cards) ? payload.cards.length : 0;
   if (remoteCards > 0 && nextCards < remoteCards) {
@@ -2559,13 +2625,26 @@ async function upsertCloudStateSafely(client, userId, payload, remoteState) {
       "安全のため同期を中止しました（カードが減る書き込みを防ぎました）。ページを再読み込みしてから、もう一度お試しください。"
     );
   }
-  await upsertCloudState(client, userId, payload);
+  await upsertCloudState(client, owner, payload);
 }
 
-async function upsertCloudState(client, userId, payload) {
+async function upsertCloudState(client, owner, payload) {
+  if (owner.kind === "space") {
+    const { error } = await client.from(CLOUD_SPACE_TABLE).upsert(
+      {
+        space_id: owner.key,
+        state: payload,
+        device_id: getCloudDeviceId(),
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "space_id" }
+    );
+    if (error) throw error;
+    return;
+  }
   const { error } = await client.from(CLOUD_TABLE).upsert(
     {
-      user_id: userId,
+      user_id: owner.key,
       state: payload,
       device_id: getCloudDeviceId(),
       client_updated_at: new Date().toISOString()
