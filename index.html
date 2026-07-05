@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=29" />
+    <link rel="stylesheet" href="styles.css?v=30" />
   </head>
   <body>
     <div class="app-shell">
@@ -289,10 +289,10 @@
 
               <div class="sync-actions">
                 <button class="primary-button" type="button" id="cloudSyncButton">今すぐ同期</button>
-                <button class="secondary-button" type="button" id="cloudUploadButton">この端末を保存</button>
+                <button class="secondary-button" type="button" id="cloudUploadButton">この端末の変更を送信</button>
                 <button class="secondary-button" type="button" id="cloudDownloadButton">クラウドから取り込み</button>
               </div>
-              <p class="sync-note">ログイン中は、カード作成・復習・編集・削除を自動で同期します。別端末の変更もアプリ表示中に自動で取り込みます。</p>
+              <p class="sync-note">ログイン中は、カードの作成・復習・編集・削除を自動で同期します。別の端末やブラウザ（このアプリを別URLで開いた場合も含む）で開くと、その変更も自動で取り込みます。同期はつねに両方のカードを足し合わせる方式（マージ）なので、空の端末で開いても、どのボタンを押しても、他の端末のカードが消えることはありません。カードを消したいときだけ、そのカードを削除すると全端末に反映されます。</p>
             </section>
 
             <section class="settings-section">
@@ -347,6 +347,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
     <script src="cloud-config.js"></script>
-    <script src="main.js?v=29"></script>
+    <script src="main.js?v=30"></script>
   </body>
 </html>

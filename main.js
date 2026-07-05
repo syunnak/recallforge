@@ -2469,18 +2469,17 @@ async function runCloudSync({ mode, silent = false }) {
     cloudBusy = true;
     renderCloudStatus();
 
-    if (mode === "upload") {
-      await upsertCloudState(client, user.id, serializeAppState(state));
+    const remoteState = await fetchCloudState(client, user.id);
+    if (mode === "download") {
+      if (!remoteState) throw new Error("クラウド側に同期データがまだありません。");
+      applySyncedState(mergeAppStates(state, remoteState));
     } else {
-      const remoteState = await fetchCloudState(client, user.id);
-      if (mode === "download") {
-        if (!remoteState) throw new Error("クラウド側に同期データがまだありません。");
-        applySyncedState(mergeAppStates(state, remoteState));
-      } else {
-        const merged = remoteState ? mergeAppStates(state, remoteState) : serializeAppState(state);
-        applySyncedState(merged);
-        await upsertCloudState(client, user.id, serializeAppState(state));
-      }
+      // 「今すぐ同期」「この端末を保存」いずれの場合も、クラウド側のカードを消さないよう
+      // 必ずリモートとマージ（和集合）してから書き戻す。これにより、空の端末や
+      // 別ブラウザで開いた直後でも、クラウドのカードを誤って上書きすることはない。
+      const merged = remoteState ? mergeAppStates(state, remoteState) : serializeAppState(state);
+      applySyncedState(merged);
+      await upsertCloudStateSafely(client, user.id, serializeAppState(state), remoteState);
     }
 
     localStorage.setItem(CLOUD_LAST_SYNC_KEY, new Date().toISOString());
@@ -2546,6 +2545,21 @@ async function fetchCloudState(client, userId) {
     .limit(1);
   if (error) throw error;
   return data?.[0]?.state || null;
+}
+
+// クラウドへ書き込む前の最終安全弁。
+// 正常なマージはリモートの全カード（削除済みの記録も含む）を必ず引き継ぐため、
+// 書き込むカードの記録件数がリモートより減ることはない。もし減っているなら
+// 何らかの異常なので、クラウドのデータを守るために書き込みを中止する。
+async function upsertCloudStateSafely(client, userId, payload, remoteState) {
+  const remoteCards = Array.isArray(remoteState?.cards) ? remoteState.cards.length : 0;
+  const nextCards = Array.isArray(payload?.cards) ? payload.cards.length : 0;
+  if (remoteCards > 0 && nextCards < remoteCards) {
+    throw new Error(
+      "安全のため同期を中止しました（カードが減る書き込みを防ぎました）。ページを再読み込みしてから、もう一度お試しください。"
+    );
+  }
+  await upsertCloudState(client, userId, payload);
 }
 
 async function upsertCloudState(client, userId, payload) {
