@@ -186,7 +186,6 @@ textarea {
 
 .header-actions,
 .toolbar,
-.candidate-toolbar,
 .form-actions,
 .inline-row {
   display: flex;
@@ -227,7 +226,6 @@ textarea {
 
 .study-layout,
 .split-layout,
-.generator-layout,
 .settings-grid {
   display: grid;
   gap: 18px;
@@ -239,7 +237,6 @@ textarea {
 }
 
 .split-layout,
-.generator-layout,
 .settings-grid {
   grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.25fr);
   align-items: start;
@@ -274,7 +271,6 @@ textarea {
 .review-panel,
 .editor-panel,
 .list-panel,
-.candidate-panel,
 .settings-section {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -292,7 +288,6 @@ textarea {
 .review-panel,
 .editor-panel,
 .list-panel,
-.candidate-panel,
 .settings-section {
   padding: 18px;
 }
@@ -583,24 +578,6 @@ textarea {
   font-weight: 800;
 }
 
-.cloze-blank {
-  display: inline-block;
-  min-width: 5.5em;
-  margin: 0 0.12em;
-  padding: 0 0.3em;
-  border-bottom: 3px solid var(--accent);
-  color: transparent;
-}
-
-.cloze-answer {
-  display: inline-block;
-  margin: 0 0.12em;
-  padding: 0 0.3em;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
 .panel-section {
   display: grid;
   gap: 10px;
@@ -764,15 +741,13 @@ textarea:focus {
 
 form,
 .editor-panel,
-.candidate-panel,
 .list-panel,
 .settings-section {
   display: grid;
   gap: 14px;
 }
 
-.card-list,
-.candidate-list {
+.card-list {
   display: grid;
   gap: 10px;
   max-height: calc(100vh - 190px);
@@ -780,8 +755,7 @@ form,
   padding-right: 4px;
 }
 
-.list-card,
-.candidate-card {
+.list-card {
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -790,30 +764,26 @@ form,
   background: #ffffff;
 }
 
-.list-card-header,
-.candidate-card-header {
+.list-card-header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
 }
 
-.list-card h3,
-.candidate-card h3 {
+.list-card h3 {
   margin: 0;
   font-size: 1rem;
 }
 
 .list-card p,
-.candidate-card p,
 .empty-state p {
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
 }
 
-.card-actions,
-.candidate-actions {
+.card-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -834,20 +804,6 @@ form,
   height: 1px;
   opacity: 0;
   pointer-events: none;
-}
-
-.candidate-toolbar {
-  justify-content: space-between;
-}
-
-.candidate-card textarea,
-.candidate-card input {
-  font-size: 0.94rem;
-}
-
-.candidate-score {
-  color: var(--muted);
-  font-size: 0.8rem;
 }
 
 .empty-state {
@@ -904,31 +860,6 @@ form,
   border-radius: var(--radius);
   background: #ffffff;
   font-weight: 900;
-}
-
-.feedback-list {
-  display: grid;
-  gap: 12px;
-  margin: 0;
-}
-
-.feedback-list div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #ffffff;
-}
-
-.feedback-list dt,
-.feedback-list dd {
-  margin: 0;
-}
-
-.feedback-list dt {
-  color: var(--muted);
 }
 
 .sync-form,
@@ -1052,7 +983,7 @@ dialog p {
   }
 
   .nav-tabs {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .nav-tab {
@@ -1066,13 +997,11 @@ dialog p {
 
   .study-layout,
   .split-layout,
-  .generator-layout,
   .settings-grid {
     grid-template-columns: 1fr;
   }
 
-  .card-list,
-  .candidate-list {
+  .card-list {
     max-height: none;
   }
 }
@@ -1106,7 +1035,6 @@ dialog p {
   .review-panel,
   .editor-panel,
   .list-panel,
-  .candidate-panel,
   .settings-section {
     padding: 14px;
   }

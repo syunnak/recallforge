@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=34" />
+    <link rel="stylesheet" href="styles.css?v=35" />
   </head>
   <body>
     <div class="app-shell">
@@ -29,7 +29,6 @@
         <nav class="nav-tabs" aria-label="画面切り替え">
           <button class="nav-tab is-active" data-route="study">学習</button>
           <button class="nav-tab" data-route="cards">カード</button>
-          <button class="nav-tab" data-route="notion">Notion取込</button>
           <button class="nav-tab" data-route="settings">設定</button>
         </nav>
 
@@ -72,8 +71,8 @@
             <article class="study-card" id="studyCard">
               <div class="empty-state">
                 <h3>復習するカードはありません</h3>
-                <p>カードを追加するか、Notion取込から候補を作成してください。</p>
-                <button class="primary-button" data-route-button="notion">Notion取込へ</button>
+                <p>カードを追加してください。</p>
+                <button class="primary-button" data-route-button="cards">カードを作る</button>
               </div>
             </article>
 
@@ -134,13 +133,6 @@
                 <input type="hidden" id="cardId" />
                 <div class="form-grid">
                   <label>
-                    種類
-                    <select id="cardType">
-                      <option value="basic">通常カード</option>
-                      <option value="cloze">穴埋め</option>
-                    </select>
-                  </label>
-                  <label>
                     デッキ
                     <select id="cardDeck"></select>
                   </label>
@@ -164,11 +156,11 @@
                 </div>
                 <label>
                   タグ
-                  <input id="cardTags" type="text" placeholder="notion, 医学, 英語" />
+                  <input id="cardTags" type="text" placeholder="医学, 英語, 循環器" />
                 </label>
                 <label>
                   修正メモ
-                  <textarea id="editNote" rows="3" placeholder="なぜ直したかを残すと、次の自動生成の判断材料になります"></textarea>
+                  <textarea id="editNote" rows="3" placeholder="なぜ直したかをメモとして残せます"></textarea>
                 </label>
                 <div class="form-actions">
                   <button class="primary-button" type="submit">保存</button>
@@ -188,62 +180,6 @@
                 </label>
               </div>
               <div class="card-list" id="cardList"></div>
-            </section>
-          </div>
-        </section>
-
-        <section class="view" id="view-notion" aria-labelledby="notionTitle">
-          <header class="view-header">
-            <div>
-              <p class="eyebrow">Generator</p>
-              <h2 id="notionTitle">Notion取込</h2>
-            </div>
-            <div class="header-actions">
-              <button class="secondary-button" id="loadSampleNote">サンプル</button>
-              <button class="primary-button" id="generateCards">候補を作成</button>
-            </div>
-          </header>
-
-          <div class="generator-layout">
-            <section class="editor-panel" aria-label="Notion本文">
-              <label>
-                Notionからコピーした本文
-                <textarea id="notionInput" rows="18" placeholder="見出し、箇条書き、表の内容などを貼り付け"></textarea>
-              </label>
-              <div class="form-grid">
-                <label>
-                  取り込み先デッキ
-                  <select id="notionDeck"></select>
-                </label>
-                <label>
-                  生成の厳しさ
-                  <select id="generationStrictness">
-                    <option value="balanced">標準</option>
-                    <option value="strict">重要項目だけ</option>
-                    <option value="wide">多めに作る</option>
-                  </select>
-                </label>
-              </div>
-              <label>
-                作らない語句
-                <input id="blockedTerms" type="text" placeholder="例: など, つまり, メモ" />
-              </label>
-            </section>
-
-            <section class="candidate-panel" aria-label="生成候補">
-              <div class="candidate-toolbar">
-                <strong id="candidateCount">候補 0件</strong>
-                <div>
-                  <button class="ghost-button" id="selectAllCandidates">すべて選択</button>
-                  <button class="primary-button" id="acceptCandidates">選択をカード化</button>
-                </div>
-              </div>
-              <div class="candidate-list" id="candidateList">
-                <div class="empty-state compact">
-                  <h3>候補はまだありません</h3>
-                  <p>Notion本文を貼り付けて候補を作成してください。</p>
-                </div>
-              </div>
             </section>
           </div>
         </section>
@@ -328,17 +264,7 @@
               <button class="secondary-button" id="addPreset">プリセット追加</button>
             </section>
             <section class="settings-section">
-              <h3>生成フィードバック</h3>
-              <dl class="feedback-list">
-                <div>
-                  <dt>修正履歴</dt>
-                  <dd id="editHistoryCount">0件</dd>
-                </div>
-                <div>
-                  <dt>削除された自動生成カード</dt>
-                  <dd id="deletedGeneratedCount">0件</dd>
-                </div>
-              </dl>
+              <h3>データ管理</h3>
               <button class="danger-button" id="resetDataButton">全データを消去</button>
             </section>
           </div>
@@ -361,6 +287,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
     <script src="cloud-config.js"></script>
-    <script src="main.js?v=34"></script>
+    <script src="main.js?v=35"></script>
   </body>
 </html>

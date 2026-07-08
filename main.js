@@ -39,23 +39,10 @@ const PRESETS_VERSION = 2;
 
 const DEFAULT_DECKS = [DEFAULT_DECK_NAME, "IT関連", "AI関連"];
 
-const SAMPLE_NOTE = `# 自律神経
-
-- 交感神経: 心拍数を増やし、瞳孔を散大させ、消化管運動を抑制する。
-- 副交感神経: 心拍数を下げ、消化管運動を促進する。
-- アセチルコリンは副交感神経の主要な神経伝達物質である。
-
-## 復習ポイント
-
-- ノルアドレナリン: 交感神経の節後線維から放出されることが多い。
-- 自律神経の中枢は視床下部にある。
-- 迷走神経は副交感神経に分類される。`;
-
 let state = loadState();
 let currentRoute = "study";
 let currentStudyCardId = null;
 let answerVisible = false;
-let candidates = [];
 let cloudClient = null;
 let cloudSession = null;
 let cloudBusy = false;
@@ -108,7 +95,6 @@ function bindElements() {
     newCardButton: document.getElementById("newCardButton"),
     cardForm: document.getElementById("cardForm"),
     cardId: document.getElementById("cardId"),
-    cardType: document.getElementById("cardType"),
     cardDeck: document.getElementById("cardDeck"),
     cardFront: document.getElementById("cardFront"),
     cardBack: document.getElementById("cardBack"),
@@ -123,23 +109,11 @@ function bindElements() {
     exportJsonButton: document.getElementById("exportJsonButton"),
     importFile: document.getElementById("importFile"),
     cardList: document.getElementById("cardList"),
-    notionInput: document.getElementById("notionInput"),
-    notionDeck: document.getElementById("notionDeck"),
-    generationStrictness: document.getElementById("generationStrictness"),
-    blockedTerms: document.getElementById("blockedTerms"),
-    loadSampleNote: document.getElementById("loadSampleNote"),
-    generateCards: document.getElementById("generateCards"),
-    candidateCount: document.getElementById("candidateCount"),
-    candidateList: document.getElementById("candidateList"),
-    selectAllCandidates: document.getElementById("selectAllCandidates"),
-    acceptCandidates: document.getElementById("acceptCandidates"),
     presetEditor: document.getElementById("presetEditor"),
     addPreset: document.getElementById("addPreset"),
     deckForm: document.getElementById("deckForm"),
     newDeckName: document.getElementById("newDeckName"),
     deckList: document.getElementById("deckList"),
-    editHistoryCount: document.getElementById("editHistoryCount"),
-    deletedGeneratedCount: document.getElementById("deletedGeneratedCount"),
     resetDataButton: document.getElementById("resetDataButton"),
     cloudConfigForm: document.getElementById("cloudConfigForm"),
     supabaseUrl: document.getElementById("supabaseUrl"),
@@ -229,7 +203,7 @@ function bindEvents() {
     const card = getCard(currentStudyCardId);
     if (!card) return;
     if (!window.confirm("このカードを削除しますか？")) return;
-    deleteCard(card.id, "study");
+    deleteCard(card.id);
   });
 
   els.newCardButton.addEventListener("click", () => {
@@ -256,15 +230,6 @@ function bindEvents() {
   els.clearFormButton.addEventListener("click", clearCardForm);
   els.exportJsonButton.addEventListener("click", exportCards);
   els.importFile.addEventListener("change", handleImportFile);
-  els.loadSampleNote.addEventListener("click", () => {
-    els.notionInput.value = SAMPLE_NOTE;
-  });
-  els.generateCards.addEventListener("click", generateCandidatesFromNotion);
-  els.selectAllCandidates.addEventListener("click", () => {
-    candidates = candidates.map((candidate) => ({ ...candidate, selected: true }));
-    renderCandidates();
-  });
-  els.acceptCandidates.addEventListener("click", acceptSelectedCandidates);
   els.deckForm.addEventListener("submit", createDeckFromForm);
   els.addPreset.addEventListener("click", () => {
     state.settings.presets.push({ label: "90分", minutes: 90 });
@@ -275,7 +240,6 @@ function bindEvents() {
     localStorage.removeItem(STORAGE_KEY);
     state = createDefaultState();
     currentStudyCardId = null;
-    candidates = [];
     ensureInitialCards();
     renderAll();
   });
@@ -331,6 +295,12 @@ function loadState() {
   }
 }
 
+// 廃止した穴埋め（cloze）カードを読み込んだ場合、通常カードへ変換する。
+// {{c1::答え}} / {{c1::答え::ヒント}} 記法を、答えのテキストだけに置き換える。
+function convertClozeMarkupToText(value) {
+  return String(value || "").replace(/\{\{c\d+::([^:}]+)(?:::[^}]*)?\}\}/g, "$1");
+}
+
 function normalizeLoadedState(input) {
   const nextState = {
     ...createDefaultState(),
@@ -340,6 +310,16 @@ function normalizeLoadedState(input) {
       ...(input.settings || {})
     }
   };
+  if (Array.isArray(nextState.cards)) {
+    nextState.cards = nextState.cards.map((card) => {
+      if (!card || card.type !== "cloze") return card;
+      return {
+        ...card,
+        type: "basic",
+        front: convertClozeMarkupToText(card.front)
+      };
+    });
+  }
   const activeCards = Array.isArray(nextState.cards)
     ? nextState.cards.filter((card) => card?.status !== "deleted")
     : [];
@@ -376,14 +356,6 @@ function ensureInitialCards() {
       back: "5分、45分、6時間、任意の日時など、細かく再表示までの期間を指定できます。",
       tags: ["sample"],
       dueAt: now
-    }),
-    makeCard({
-      type: "cloze",
-      deck: "Sample",
-      front: "{{c1::Notion}}からコピーしたまとめノートをもとに、カード候補を自動生成できる。",
-      back: "生成候補は採用前に編集できます。",
-      tags: ["sample", "cloze"],
-      dueAt: now
     })
   );
   saveState();
@@ -394,7 +366,7 @@ function makeCard(input) {
   const deck = ensureDeckExists(input.deck);
   return {
     id: input.id || crypto.randomUUID(),
-    type: input.type === "cloze" ? "cloze" : "basic",
+    type: "basic",
     deck,
     front: normalizeText(input.front),
     back: normalizeText(input.back),
@@ -426,7 +398,6 @@ function renderAll() {
   renderIntervals();
   renderStudy();
   renderCardList();
-  renderCandidates();
   renderSettings();
 }
 
@@ -454,7 +425,6 @@ function renderDeckControls() {
     .join("")}`;
   els.deckFilter.value = decks.includes(selected) ? selected : "all";
   renderDeckSelect(els.cardDeck, els.cardDeck.value || DEFAULT_DECK_NAME, DEFAULT_DECK_NAME);
-  renderDeckSelect(els.notionDeck, els.notionDeck.value || DEFAULT_DECK_NAME, DEFAULT_DECK_NAME);
 }
 
 function renderIntervals() {
@@ -481,21 +451,21 @@ function renderStudy() {
     els.studyCard.innerHTML = `
       <div class="empty-state">
         <h3>復習するカードはありません</h3>
-        <p>カードを追加するか、Notion取込から候補を作成してください。</p>
-        <button class="primary-button" data-route-button="notion">Notion取込へ</button>
+        <p>カードを追加してください。</p>
+        <button class="primary-button" data-route-button="cards">カードを作る</button>
       </div>
     `;
-    els.studyCard.querySelector("[data-route-button]")?.addEventListener("click", () => setRoute("notion"));
+    els.studyCard.querySelector("[data-route-button]")?.addEventListener("click", () => setRoute("cards"));
     return;
   }
 
-  const prompt = card.type === "cloze" ? renderCloze(card.front, answerVisible) : escapeHtml(card.front);
-  const answer = card.type === "cloze" ? `${renderCloze(card.front, true)}\n\n${renderRichText(card.back)}` : renderRichText(card.back);
+  const prompt = escapeHtml(card.front);
+  const answer = renderRichText(card.back);
   const dueLabel = isDue(card) ? "復習対象" : `予定: ${formatRelative(card.dueAt)}`;
 
   els.studyCard.innerHTML = `
     <div class="study-meta">
-      <span>${escapeHtml(card.deck)} / ${card.type === "cloze" ? "穴埋め" : "通常"}</span>
+      <span>${escapeHtml(card.deck)}</span>
       <span>${dueLabel}</span>
     </div>
     <div class="tag-row">${card.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
@@ -614,7 +584,7 @@ function renderCardList() {
     els.cardList.innerHTML = `
       <div class="empty-state compact">
         <h3>カードがありません</h3>
-        <p>新規カードを作るか、Notion取込を使ってください。</p>
+        <p>新規カードを作ってください。</p>
       </div>
     `;
     return;
@@ -629,7 +599,6 @@ function renderCardList() {
             <h3>${escapeHtml(card.front)}</h3>
             <p>${escapeHtml(getBackPreview(card.back))}</p>
           </div>
-          <span class="tag">${card.type === "cloze" ? "穴埋め" : "通常"}</span>
         </div>
         <div class="tag-row">
           <span class="tag">${escapeHtml(card.deck)}</span>
@@ -651,90 +620,7 @@ function renderCardList() {
   els.cardList.querySelectorAll("[data-delete-card]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!window.confirm("このカードを削除しますか？")) return;
-      deleteCard(button.dataset.deleteCard, "list");
-    });
-  });
-}
-
-function renderCandidates() {
-  els.candidateCount.textContent = `候補 ${candidates.length}件`;
-  if (candidates.length === 0) {
-    els.candidateList.innerHTML = `
-      <div class="empty-state compact">
-        <h3>候補はまだありません</h3>
-        <p>Notion本文を貼り付けて候補を作成してください。</p>
-      </div>
-    `;
-    return;
-  }
-
-  els.candidateList.innerHTML = candidates
-    .map(
-      (candidate, index) => `
-      <article class="candidate-card" data-candidate-index="${index}">
-        <div class="candidate-card-header">
-          <label>
-            <input type="checkbox" data-candidate-selected="${index}" ${candidate.selected ? "checked" : ""} />
-            採用
-          </label>
-          <span class="candidate-score">重要度 ${candidate.score}</span>
-        </div>
-        <div class="form-grid">
-          <label>
-            種類
-            <select data-candidate-field="type">
-              <option value="basic" ${candidate.type === "basic" ? "selected" : ""}>通常</option>
-              <option value="cloze" ${candidate.type === "cloze" ? "selected" : ""}>穴埋め</option>
-            </select>
-          </label>
-          <label>
-            デッキ
-            <select data-candidate-field="deck">
-              ${renderDeckOptionsHtml(candidate.deck)}
-            </select>
-          </label>
-        </div>
-        <label>
-          問題
-          <textarea rows="3" data-candidate-field="front">${escapeHtml(candidate.front)}</textarea>
-        </label>
-        <label>
-          解説
-          <textarea rows="3" data-candidate-field="back">${escapeHtml(candidate.back)}</textarea>
-        </label>
-        <label>
-          タグ
-          <input data-candidate-field="tags" value="${escapeAttribute(candidate.tags.join(", "))}" />
-        </label>
-        <div class="candidate-actions">
-          <button class="ghost-button" data-reject-candidate="${index}">候補から外す</button>
-        </div>
-      </article>
-    `
-    )
-    .join("");
-
-  els.candidateList.querySelectorAll("[data-candidate-selected]").forEach((input) => {
-    input.addEventListener("change", () => {
-      candidates[Number(input.dataset.candidateSelected)].selected = input.checked;
-    });
-  });
-
-  els.candidateList.querySelectorAll("[data-candidate-field]").forEach((field) => {
-    const eventName = field.tagName === "SELECT" ? "change" : "input";
-    field.addEventListener(eventName, () => {
-      const index = Number(field.closest("[data-candidate-index]").dataset.candidateIndex);
-      const key = field.dataset.candidateField;
-      candidates[index][key] = key === "tags" ? normalizeTags(field.value) : field.value;
-    });
-  });
-
-  els.candidateList.querySelectorAll("[data-reject-candidate]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = Number(button.dataset.rejectCandidate);
-      const [removed] = candidates.splice(index, 1);
-      if (removed) rememberBlockedTerms(removed.front);
-      renderCandidates();
+      deleteCard(button.dataset.deleteCard);
     });
   });
 }
@@ -791,9 +677,6 @@ function renderSettings() {
       persistAndRender();
     });
   });
-
-  els.editHistoryCount.textContent = `${state.editHistory.length}件`;
-  els.deletedGeneratedCount.textContent = `${state.deletedGenerated.length}件`;
 }
 
 function getActiveCards() {
@@ -857,7 +740,6 @@ function saveCardFromForm(event) {
     updateCardBackPreview();
   }
   const input = {
-    type: els.cardType.value,
     deck,
     front: els.cardFront.value,
     back,
@@ -874,9 +756,8 @@ function saveCardFromForm(event) {
 
   const existing = getCard(els.cardId.value);
   if (existing) {
-    const before = { front: existing.front, back: existing.back, type: existing.type };
+    const before = { front: existing.front, back: existing.back };
     Object.assign(existing, {
-      type: input.type,
       deck: ensureDeckExists(input.deck),
       front: normalizeText(input.front),
       back: normalizeText(input.back),
@@ -888,7 +769,7 @@ function saveCardFromForm(event) {
         id: crypto.randomUUID(),
         cardId: existing.id,
         before,
-        after: { front: existing.front, back: existing.back, type: existing.type },
+        after: { front: existing.front, back: existing.back },
         note: normalizeText(els.editNote.value),
         at: new Date().toISOString()
       });
@@ -907,7 +788,6 @@ function fillCardForm(card) {
   ensureDeckExists(card.deck);
   renderDeckControls();
   els.cardId.value = card.id;
-  els.cardType.value = card.type;
   els.cardDeck.value = card.deck;
   els.cardFront.value = card.front;
   els.cardBack.value = card.back;
@@ -918,7 +798,6 @@ function fillCardForm(card) {
 
 function clearCardForm() {
   els.cardId.value = "";
-  els.cardType.value = "basic";
   renderDeckSelect(els.cardDeck, DEFAULT_DECK_NAME, getDeckNames()[0] || DEFAULT_DECK_NAME);
   els.cardFront.value = "";
   els.cardBack.value = "";
@@ -927,22 +806,11 @@ function clearCardForm() {
   updateCardBackPreview();
 }
 
-function deleteCard(id, source) {
+function deleteCard(id) {
   const card = getCard(id);
   if (!card) return;
   card.status = "deleted";
   card.updatedAt = new Date().toISOString();
-  if (card.source === "notion") {
-    state.deletedGenerated.push({
-      id: crypto.randomUUID(),
-      cardId: card.id,
-      front: card.front,
-      sourceLine: card.sourceLine,
-      source,
-      at: new Date().toISOString()
-    });
-    rememberBlockedTerms(card.front);
-  }
   if (currentStudyCardId === id) {
     currentStudyCardId = null;
     answerVisible = false;
@@ -1378,11 +1246,12 @@ function parseCsvCards(text) {
 }
 
 function validateImportedCard(input) {
-  const front = normalizeText(input.front);
+  // 旧形式（穴埋めカード）を取り込んだ場合は、通常カードへ変換する。
+  const front = normalizeText(input.type === "cloze" ? convertClozeMarkupToText(input.front) : input.front);
   const back = normalizeText(input.back);
   if (!front || !back) throw new Error("frontとbackが必要です。");
   return {
-    type: input.type === "cloze" ? "cloze" : "basic",
+    type: "basic",
     deck: ensureDeckExists(input.deck || DEFAULT_DECK_NAME),
     front,
     back,
@@ -1421,197 +1290,6 @@ function parseCsv(text) {
   row.push(value);
   rows.push(row);
   return rows;
-}
-
-function generateCandidatesFromNotion() {
-  const text = normalizeText(els.notionInput.value);
-  if (!text) {
-    showMessage("本文がありません", "Notionからコピーした本文を貼り付けてください。");
-    return;
-  }
-
-  state.settings.blockedTerms = normalizeTags(els.blockedTerms.value).concat(state.settings.blockedTerms || []);
-  const deck = ensureDeckExists(els.notionDeck.value || DEFAULT_DECK_NAME);
-  const strictness = els.generationStrictness.value;
-  const minimumScore = strictness === "strict" ? 5 : strictness === "wide" ? 2 : 3;
-  const generated = extractCandidates(text, deck)
-    .filter((candidate) => candidate.score >= minimumScore)
-    .filter((candidate) => !isBlockedCandidate(candidate))
-    .slice(0, 60);
-
-  candidates = generated.map((candidate) => ({ ...candidate, selected: true }));
-  saveState();
-  renderCandidates();
-}
-
-function extractCandidates(text, deck) {
-  const lines = text.split(/\n+/).map(cleanNoteLine).filter(Boolean);
-  const output = [];
-  let heading = "";
-
-  lines.forEach((line) => {
-    if (/^#{1,6}\s+/.test(line)) {
-      heading = line.replace(/^#{1,6}\s+/, "").trim();
-      return;
-    }
-
-    const sourceLine = line;
-    const withoutBullet = line.replace(/^[-*・]\s*/, "").trim();
-    const tags = DEFAULT_CARD_TAGS.concat(["notion"], heading ? [heading] : []);
-
-    const definition = splitDefinition(withoutBullet);
-    if (definition) {
-      const [term, detail] = definition;
-      output.push({
-        id: crypto.randomUUID(),
-        type: "basic",
-        deck,
-        front: `${term}とは？`,
-        back: detail,
-        tags,
-        sourceLine,
-        score: scoreLine(term, detail, sourceLine) + 2,
-        selected: true
-      });
-      output.push({
-        id: crypto.randomUUID(),
-        type: "cloze",
-        deck,
-        front: `{{c1::${term}}}: ${detail}`,
-        back: detail,
-        tags: tags.concat(["穴埋め"]),
-        sourceLine,
-        score: scoreLine(term, detail, sourceLine),
-        selected: true
-      });
-      return;
-    }
-
-    const clozeTarget = pickClozeTarget(withoutBullet);
-    if (clozeTarget) {
-      output.push({
-        id: crypto.randomUUID(),
-        type: "cloze",
-        deck,
-        front: withoutBullet.replace(clozeTarget, `{{c1::${clozeTarget}}}`),
-        back: withoutBullet,
-        tags,
-        sourceLine,
-        score: scoreLine(clozeTarget, withoutBullet, sourceLine),
-        selected: true
-      });
-    }
-  });
-
-  return dedupeCandidates(output);
-}
-
-function cleanNoteLine(line) {
-  return line
-    .replace(/\t/g, " ")
-    .replace(/\*\*/g, "")
-    .replace(/`/g, "")
-    .replace(/\[\[|\]\]/g, "")
-    .trim();
-}
-
-function splitDefinition(line) {
-  const colon = line.match(/^(.{2,40}?)[：:]\s*(.{4,})$/);
-  if (colon) return [colon[1].trim(), colon[2].trim()];
-  const isPattern = line.match(/^(.{2,28}?)(とは|は)\s*(.{8,})$/);
-  if (isPattern && !/[。.!?]$/.test(isPattern[1])) return [isPattern[1].trim(), isPattern[3].trim()];
-  const equals = line.match(/^(.{2,40}?)\s*=\s*(.{4,})$/);
-  if (equals) return [equals[1].trim(), equals[2].trim()];
-  return null;
-}
-
-function pickClozeTarget(line) {
-  const bold = line.match(/【(.{2,24}?)】/);
-  if (bold) return bold[1];
-  const nounish = line.match(/^([一-龠ぁ-んァ-ンA-Za-z0-9ー・]{2,24})(は|が|を|に)/);
-  if (nounish) return nounish[1];
-  const quoted = line.match(/[「『](.{2,24}?)[」』]/);
-  if (quoted) return quoted[1];
-  return null;
-}
-
-function scoreLine(term, detail, sourceLine) {
-  let score = 1;
-  if (term.length >= 3 && term.length <= 18) score += 1;
-  if (detail.length >= 12) score += 1;
-  if (/重要|必須|ポイント|原因|結果|分類|定義|中枢|主要/.test(sourceLine)) score += 2;
-  if (/^[-*・]/.test(sourceLine)) score += 1;
-  if (state.editHistory.some((history) => history.after?.front?.includes(term))) score += 1;
-  if (state.deletedGenerated.some((deleted) => deleted.front.includes(term))) score -= 3;
-  return Math.max(0, score);
-}
-
-function dedupeCandidates(items) {
-  const seen = new Set();
-  return items.filter((item) => {
-    const key = `${item.type}:${item.front}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function isBlockedCandidate(candidate) {
-  const terms = [...new Set(normalizeTags(els.blockedTerms.value).concat(state.settings.blockedTerms || []))];
-  return terms.some((term) => term && `${candidate.front} ${candidate.back}`.includes(term));
-}
-
-function acceptSelectedCandidates() {
-  const selected = candidates.filter((candidate) => candidate.selected);
-  if (selected.length === 0) {
-    showMessage("選択がありません", "カード化する候補を選択してください。");
-    return;
-  }
-  selected.forEach((candidate) => {
-    const deck = ensureDeckExists(candidate.deck);
-    state.cards.push(
-      makeCard({
-        type: candidate.type,
-        deck,
-        front: candidate.front,
-        back: candidate.back,
-        tags: candidate.tags,
-        source: "notion",
-        sourceLine: candidate.sourceLine
-      })
-    );
-  });
-  candidates = candidates.filter((candidate) => !candidate.selected);
-  persistAndRender();
-  showMessage("カード化しました", `${selected.length}件のカードを追加しました。`);
-}
-
-function rememberBlockedTerms(text) {
-  const candidate = pickClozeTarget(text) || text.replace(/とは？$/, "").slice(0, 24);
-  if (!candidate || candidate.length < 2) return;
-  const next = new Set(state.settings.blockedTerms || []);
-  next.add(candidate);
-  state.settings.blockedTerms = [...next].slice(-200);
-}
-
-function renderCloze(text, reveal) {
-  const pattern = /\{\{c\d+::(.*?)(?:::(.*?))?\}\}/g;
-  let cursor = 0;
-  let html = "";
-  let match = pattern.exec(text);
-
-  while (match) {
-    html += escapeHtml(text.slice(cursor, match.index));
-    const answer = match[1];
-    const hint = match[2];
-    html += reveal
-      ? `<span class="cloze-answer">${escapeHtml(answer)}</span>`
-      : `<span class="cloze-blank">${hint ? escapeHtml(hint) : "　　　　　"}</span>`;
-    cursor = pattern.lastIndex;
-    match = pattern.exec(text);
-  }
-
-  return html + escapeHtml(text.slice(cursor));
 }
 
 function renderRichText(value) {
@@ -2212,7 +1890,6 @@ function getDeckNames() {
 
   (state.settings.decks || []).forEach(add);
   state.cards.filter((card) => card.status === "active").forEach((card) => add(card.deck));
-  candidates.forEach((candidate) => add(candidate.deck));
   if (names.length === 0) add(DEFAULT_DECK_NAME);
   return names;
 }
@@ -2254,10 +1931,6 @@ function renameDeck(oldName, newNameValue) {
   state.cards.forEach((card) => {
     if (card.deck === oldName) card.deck = nextName;
   });
-  candidates = candidates.map((candidate) => ({
-    ...candidate,
-    deck: candidate.deck === oldName ? nextName : candidate.deck
-  }));
   persistAndRender();
 }
 
@@ -2271,11 +1944,6 @@ function removeDeck(deck) {
     showMessage("削除できません", "デッキは少なくとも1つ必要です。");
     return;
   }
-  const fallback = getDeckNames().find((name) => name !== deck) || DEFAULT_DECK_NAME;
-  candidates = candidates.map((candidate) => ({
-    ...candidate,
-    deck: candidate.deck === deck ? fallback : candidate.deck
-  }));
   state.settings.decks = getDeckNames().filter((name) => name !== deck);
   persistAndRender();
 }
