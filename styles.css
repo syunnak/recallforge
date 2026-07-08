@@ -324,6 +324,37 @@ textarea {
   font-weight: 700;
 }
 
+/* 自動タグの種類ごとの色分け */
+.tag--specialty {
+  background: #e3efff;
+  color: #1c4e8a;
+}
+
+.tag--disease {
+  background: #ffe8e6;
+  color: #a3372c;
+}
+
+.tag--keyword {
+  background: #eae6f7;
+  color: #5b3fa0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tag--specialty {
+    background: #1c3454;
+    color: #b9d5ff;
+  }
+  .tag--disease {
+    background: #4d2320;
+    color: #ffc4bd;
+  }
+  .tag--keyword {
+    background: #322a52;
+    color: #d3c6f5;
+  }
+}
+
 .prompt-text,
 .answer-text {
   white-space: pre-wrap;

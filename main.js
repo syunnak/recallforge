@@ -102,6 +102,9 @@ function bindElements() {
     editCurrentCard: document.getElementById("editCurrentCard"),
     deleteCurrentCard: document.getElementById("deleteCurrentCard"),
     cardSearch: document.getElementById("cardSearch"),
+    cardSortSelect: document.getElementById("cardSortSelect"),
+    cardSpecialtyFilter: document.getElementById("cardSpecialtyFilter"),
+    autoTagAllButton: document.getElementById("autoTagAllButton"),
     newCardButton: document.getElementById("newCardButton"),
     cardForm: document.getElementById("cardForm"),
     cardId: document.getElementById("cardId"),
@@ -235,6 +238,12 @@ function bindEvents() {
   });
 
   els.cardSearch.addEventListener("input", renderCardList);
+  els.cardSortSelect?.addEventListener("change", renderCardList);
+  els.cardSpecialtyFilter?.addEventListener("change", renderCardList);
+  els.autoTagAllButton?.addEventListener("click", () => {
+    if (!window.confirm("すべてのカードの問題・解説から、診療科・疾患名・キーワードのタグを自動で付けます。よろしいですか？（手動で付けたタグは残ります）")) return;
+    autoTagAllCards();
+  });
   els.cardForm.addEventListener("submit", saveCardFromForm);
   els.addBackImageButton.addEventListener("click", () => els.cardBackImageFile.click());
   els.pasteBackImageButton.addEventListener("click", pasteBackImageFromClipboard);
@@ -533,15 +542,73 @@ function restoreStudySession() {
   }
 }
 
-function renderCardList() {
-  const query = normalizeText(els.cardSearch.value).toLowerCase();
-  const cards = state.cards
+// カード一覧の並び替え。診療科順は科名（あいうえお順）でまとめ、科なしは末尾へ。
+function sortCardsForList(cards, mode) {
+  const list = [...cards];
+  if (mode === "newest") {
+    return list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }
+  if (mode === "oldest") {
+    return list.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+  }
+  if (mode === "specialty") {
+    return list.sort((a, b) => {
+      const sa = getCardSpecialties(a)[0] || "";
+      const sb = getCardSpecialties(b)[0] || "";
+      if (sa !== sb) {
+        if (!sa) return 1;
+        if (!sb) return -1;
+        return sa.localeCompare(sb, "ja");
+      }
+      return new Date(a.dueAt) - new Date(b.dueAt);
+    });
+  }
+  return list.sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+}
+
+// 診療科でしぼり込むためのプルダウンを、実際に使われている科から作り直す。
+function renderCardSpecialtyFilter() {
+  if (!els.cardSpecialtyFilter) return;
+  const specialties = new Set();
+  state.cards
     .filter((card) => card.status === "active")
-    .filter((card) => {
-      if (!query) return true;
-      return [card.front, card.back, card.deck, card.tags.join(" ")].join(" ").toLowerCase().includes(query);
+    .forEach((card) => getCardSpecialties(card).forEach((name) => specialties.add(name)));
+  const sorted = [...specialties].sort((a, b) => a.localeCompare(b, "ja"));
+  const current = els.cardSpecialtyFilter.value || "all";
+  els.cardSpecialtyFilter.innerHTML = `<option value="all">すべての科</option>${sorted
+    .map((name) => `<option value="${escapeAttribute(name)}">${escapeHtml(name)}</option>`)
+    .join("")}`;
+  els.cardSpecialtyFilter.value = sorted.includes(current) ? current : "all";
+}
+
+// タグを種類ごとに色分けして表示する。
+function renderCardTagChips(tags) {
+  return (tags || [])
+    .map((tag) => {
+      let cls = "tag";
+      if (String(tag).startsWith(AUTO_TAG_PREFIX.specialty)) cls = "tag tag--specialty";
+      else if (String(tag).startsWith(AUTO_TAG_PREFIX.disease)) cls = "tag tag--disease";
+      else if (String(tag).startsWith(AUTO_TAG_PREFIX.keyword)) cls = "tag tag--keyword";
+      return `<span class="${cls}">${escapeHtml(tag)}</span>`;
     })
-    .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+    .join("");
+}
+
+function renderCardList() {
+  renderCardSpecialtyFilter();
+  const query = normalizeText(els.cardSearch.value).toLowerCase();
+  const specialtyFilter = els.cardSpecialtyFilter?.value || "all";
+  const sortMode = els.cardSortSelect?.value || "due";
+  const cards = sortCardsForList(
+    state.cards
+      .filter((card) => card.status === "active")
+      .filter((card) => {
+        if (!query) return true;
+        return [card.front, card.back, card.deck, card.tags.join(" ")].join(" ").toLowerCase().includes(query);
+      })
+      .filter((card) => specialtyFilter === "all" || getCardSpecialties(card).includes(specialtyFilter)),
+    sortMode
+  );
 
   if (cards.length === 0) {
     els.cardList.innerHTML = `
@@ -566,7 +633,7 @@ function renderCardList() {
         </div>
         <div class="tag-row">
           <span class="tag">${escapeHtml(card.deck)}</span>
-          ${card.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}
+          ${renderCardTagChips(card.tags)}
         </div>
         <p>次回: ${formatDateTime(card.dueAt)}</p>
         <div class="card-actions">
@@ -802,6 +869,9 @@ function saveCardFromForm(event) {
     return;
   }
 
+  // 問題・解説から診療科・疾患名・キーワードのタグを自動生成し、手動タグと合わせる。
+  const autoMergedTags = mergeAutoTags(input.tags, input.front, input.back);
+
   const existing = getCard(els.cardId.value);
   if (existing) {
     const before = { front: existing.front, back: existing.back, type: existing.type };
@@ -810,7 +880,7 @@ function saveCardFromForm(event) {
       deck: ensureDeckExists(input.deck),
       front: normalizeText(input.front),
       back: normalizeText(input.back),
-      tags: normalizeTags(input.tags),
+      tags: autoMergedTags,
       updatedAt: new Date().toISOString()
     });
     if (normalizeText(els.editNote.value)) {
@@ -824,7 +894,7 @@ function saveCardFromForm(event) {
       });
     }
   } else {
-    state.cards.push(makeCard(input));
+    state.cards.push(makeCard({ ...input, tags: autoMergedTags }));
   }
 
   clearCardForm();
@@ -1966,6 +2036,136 @@ function normalizeTags(value) {
     .split(/[,;、\n]/)
     .map(normalizeText)
     .filter(Boolean);
+}
+
+// ===== カードの問題・解説から、診療科・疾患名・キーワードのタグを自動で作る =====
+// 完全なAIではなく、医学用語の辞書と語尾のルールで判定する（オフライン・無料）。
+// タグは接頭辞で種類が分かるようにする: 科:診療科 / 疾:疾患名 / 語:キーワード
+const AUTO_TAG_PREFIX = { specialty: "科:", disease: "疾:", keyword: "語:" };
+
+const SPECIALTY_RULES = [
+  { name: "循環器", keywords: ["高血圧", "血圧", "心不全", "不整脈", "心房細動", "心室", "心筋梗塞", "狭心症", "虚血性心", "弁膜", "心電図", "冠動脈", "動脈硬化", "降圧", "利尿薬", "サイアザイド", "チアジド", "ループ利尿", "カルシウム拮抗", "ACE阻害", "ARB", "遮断薬", "心房", "心筋", "心臓", "洞", "QT", "失神", "塞栓", "静脈血栓", "浮腫"] },
+  { name: "腎臓", keywords: ["腎", "腎不全", "腎障害", "糸球体", "ネフローゼ", "透析", "尿細管", "CKD", "慢性腎臓病", "急性腎障害", "電解質", "低ナトリウム", "低Na", "高ナトリウム", "高K", "低K", "高カリウム", "低カリウム", "高カルシウム", "高Ca", "低マグネシウム", "低Mg", "尿酸", "蛋白尿", "血尿", "クレアチニン", "eGFR", "アルドステロン", "レニン", "利尿"] },
+  { name: "内分泌代謝", keywords: ["糖尿病", "血糖", "インスリン", "HbA1c", "甲状腺", "バセドウ", "橋本", "副腎", "クッシング", "アジソン", "下垂体", "成長ホルモン", "プロラクチン", "ホルモン", "高尿酸血症", "痛風", "脂質異常", "コレステロール", "中性脂肪", "肥満", "メタボ"] },
+  { name: "呼吸器", keywords: ["肺", "喘息", "COPD", "慢性閉塞性", "肺炎", "気管支", "呼吸不全", "間質性", "胸水", "気胸", "肺塞栓", "結核", "喀痰", "呼吸器", "酸素", "人工呼吸", "SpO2"] },
+  { name: "消化器", keywords: ["肝", "肝硬変", "肝炎", "脂肪肝", "胃", "十二指腸", "潰瘍", "大腸", "小腸", "炎症性腸疾患", "クローン", "潰瘍性大腸炎", "膵", "膵炎", "胆", "胆石", "胆嚢", "消化管", "下痢", "黄疸", "腹水", "消化器", "逆流"] },
+  { name: "神経", keywords: ["脳梗塞", "脳出血", "くも膜下", "脳", "神経", "てんかん", "痙攣", "認知症", "アルツハイマー", "パーキンソン", "多発性硬化", "重症筋無力", "髄膜炎", "脳炎", "意識障害", "麻痺", "しびれ", "頭痛", "めまい", "末梢神経"] },
+  { name: "血液", keywords: ["貧血", "鉄欠乏", "白血病", "リンパ腫", "骨髄", "血小板", "血友病", "凝固", "DIC", "出血傾向", "溶血", "赤血球", "白血球", "好中球", "輸血", "造血"] },
+  { name: "感染症", keywords: ["感染", "敗血症", "抗菌薬", "抗生物質", "細菌", "ウイルス", "真菌", "菌血症", "肺炎球菌", "インフルエンザ", "HIV", "耐性菌"] },
+  { name: "膠原病リウマチ", keywords: ["関節リウマチ", "膠原病", "全身性エリテマトーデス", "SLE", "強皮症", "血管炎", "自己免疫", "抗核抗体", "シェーグレン", "多発性筋炎", "リウマチ"] },
+  { name: "精神", keywords: ["うつ", "抑うつ", "統合失調", "双極性", "不安障害", "パニック", "不眠", "せん妄", "抗うつ薬", "SSRI", "精神", "依存"] },
+  { name: "整形外科", keywords: ["骨折", "骨粗鬆", "関節", "脊椎", "椎間板", "靭帯", "腱", "脱臼", "変形性", "腰痛"] },
+  { name: "泌尿器", keywords: ["前立腺", "膀胱", "尿路", "尿管結石", "排尿", "尿失禁", "精巣", "陰茎", "勃起", "泌尿器"] },
+  { name: "皮膚科", keywords: ["皮膚", "発疹", "湿疹", "アトピー", "蕁麻疹", "乾癬", "水疱", "光線過敏", "色素", "脱毛"] },
+  { name: "婦人科", keywords: ["妊娠", "月経", "子宮", "卵巣", "乳腺", "更年期", "産科", "分娩", "エストロゲン"] },
+  { name: "眼科", keywords: ["緑内障", "白内障", "網膜", "視力", "結膜", "角膜", "眼圧"] },
+  { name: "耳鼻科", keywords: ["中耳", "難聴", "副鼻腔", "鼻炎", "咽頭", "扁桃", "耳鳴"] }
+];
+
+const DISEASE_PATTERN = /[一-鿿ァ-ヶーA-Za-z0-9・]{1,14}(症候群|感染症|硬化症|血症|不全|梗塞|出血|発作|結石|潰瘍|狭窄|閉塞|麻痺|骨折|中毒|腫瘍|塞栓|貧血|症|病|炎|癌|腫|障害)/g;
+
+// 語尾ルールで拾ってしまう一般名詞・非疾患を除外する。
+const DISEASE_STOPWORDS = new Set([
+  "症状", "炎症", "合併症", "既往症", "後遺症", "発症", "重症", "軽症", "対症", "病態", "病気", "病院", "病棟", "病歴",
+  "疾患", "障害", "不全", "感染", "中毒", "出血", "発作", "腫瘍", "腫", "癌", "症", "病", "炎", "貧血症"
+]);
+
+const KEYWORD_STOPWORDS = new Set([
+  "プラセボ", "コホート", "データ", "リスク", "グループ", "メモ", "ポイント", "パターン", "レベル", "タイプ", "ケース",
+  "バランス", "コントロール", "モニタリング", "スクリーニング", "ガイドライン", "エビデンス", "オッズ", "マーカー", "ベース"
+]);
+
+function isAutoTag(tag) {
+  return /^(科:|疾:|語:)/.test(String(tag || ""));
+}
+
+function detectSpecialties(text) {
+  return SPECIALTY_RULES
+    .map((rule) => ({ name: rule.name, score: rule.keywords.reduce((n, kw) => (text.includes(kw) ? n + 1 : n), 0) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((r) => r.name);
+}
+
+function detectDiseases(text) {
+  const found = [];
+  const seen = new Set();
+  DISEASE_PATTERN.lastIndex = 0;
+  let match = DISEASE_PATTERN.exec(text);
+  while (match) {
+    const term = match[0];
+    const nextChar = text[DISEASE_PATTERN.lastIndex] || "";
+    const skip = "薬剤療法".includes(nextChar) || term.length < 2 || DISEASE_STOPWORDS.has(term) || seen.has(term);
+    if (!skip) {
+      seen.add(term);
+      found.push(term);
+    }
+    match = DISEASE_PATTERN.exec(text);
+  }
+  return found;
+}
+
+function detectKeywords(text) {
+  const out = [];
+  const seen = new Set();
+  const add = (term) => {
+    if (term && !seen.has(term) && !KEYWORD_STOPWORDS.has(term)) {
+      seen.add(term);
+      out.push(term);
+    }
+  };
+  (text.match(/[ァ-ヶ][ァ-ヶー・]{3,}/g) || []).forEach(add);
+  (text.match(/[A-Z][A-Za-z0-9]{1,6}/g) || []).forEach((term) => {
+    if (/[A-Z]{2,}/.test(term)) add(term);
+  });
+  return out;
+}
+
+// 問題・解説から自動タグ（科・疾・語）の配列を作る。
+function generateAutoTags(front, back) {
+  const text = `${normalizeText(front)}\n${normalizeText(back)}`;
+  const specialties = detectSpecialties(text).slice(0, 2).map((s) => `${AUTO_TAG_PREFIX.specialty}${s}`);
+  const diseases = detectDiseases(text).slice(0, 3).map((d) => `${AUTO_TAG_PREFIX.disease}${d}`);
+  const keywords = detectKeywords(text).slice(0, 3).map((k) => `${AUTO_TAG_PREFIX.keyword}${k}`);
+  return [...specialties, ...diseases, ...keywords];
+}
+
+// 手動タグはそのまま残し、自動タグ（科・疾・語）だけを作り直して合わせる。
+function mergeAutoTags(existingTags, front, back) {
+  const manual = normalizeTags(existingTags).filter((tag) => !isAutoTag(tag));
+  const auto = generateAutoTags(front, back);
+  const merged = [];
+  const seen = new Set();
+  [...auto, ...manual].forEach((tag) => {
+    if (tag && !seen.has(tag)) {
+      seen.add(tag);
+      merged.push(tag);
+    }
+  });
+  return merged;
+}
+
+// 既存のすべてのカードに自動タグを付け直す（手動タグは保持）。
+function autoTagAllCards() {
+  let changed = 0;
+  getActiveCards().forEach((card) => {
+    const before = card.tags.join("|");
+    card.tags = mergeAutoTags(card.tags, card.front, card.back);
+    if (card.tags.join("|") !== before) {
+      card.updatedAt = new Date().toISOString();
+      changed += 1;
+    }
+  });
+  saveState();
+  renderAll();
+  showMessage("自動タグ付けが完了しました", `${changed}件のカードにタグを付けました。カード一覧の並び替え・しぼり込みで使えます。`);
+}
+
+// カードの診療科タグ（「科:」を外した名前）を返す。
+function getCardSpecialties(card) {
+  return (card.tags || [])
+    .filter((tag) => String(tag).startsWith(AUTO_TAG_PREFIX.specialty))
+    .map((tag) => tag.slice(AUTO_TAG_PREFIX.specialty.length));
 }
 
 function normalizeAssets(value) {
