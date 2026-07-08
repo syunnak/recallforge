@@ -469,7 +469,6 @@ function renderStudy() {
       <span>${escapeHtml(card.deck)}</span>
       <span>${dueLabel}</span>
     </div>
-    <div class="tag-row">${card.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
     <div class="prompt-text">${prompt}</div>
     <button class="primary-button" id="showAnswerButton">${answerVisible ? "答えを隠す" : "答えを見る"}</button>
     <div class="answer-box ${answerVisible ? "is-visible" : ""}">
