@@ -20,16 +20,22 @@ const LEGACY_DEFAULT_DECK_NAME = "Default";
 const DEFAULT_CARD_TAGS = ["医療"];
 
 const DEFAULT_PRESETS = [
-  { label: "5分", minutes: 5 },
   { label: "15分", minutes: 15 },
-  { label: "45分", minutes: 45 },
-  { label: "2時間", minutes: 120 },
-  { label: "6時間", minutes: 360 },
   { label: "1日", minutes: 1440 },
+  { label: "2日", minutes: 2880 },
   { label: "3日", minutes: 4320 },
+  { label: "5日", minutes: 7200 },
   { label: "7日", minutes: 10080 },
-  { label: "30日", minutes: 43200 }
+  { label: "10日", minutes: 14400 },
+  { label: "14日", minutes: 20160 },
+  { label: "21日", minutes: 30240 },
+  { label: "28日", minutes: 40320 },
+  { label: "60日", minutes: 86400 },
+  { label: "90日", minutes: 129600 }
 ];
+// プリセットの内容を変えたらこの番号を上げる。保存済みの端末でも、読み込み時に
+// 一度だけ新しいプリセットへ更新される（それ以降の手動編集は保持される）。
+const PRESETS_VERSION = 2;
 
 const DEFAULT_DECKS = [DEFAULT_DECK_NAME, "IT関連", "AI関連"];
 
@@ -287,6 +293,7 @@ function createDefaultState() {
     assets: {},
     settings: {
       presets: DEFAULT_PRESETS.map((preset) => ({ ...preset })),
+      presetsVersion: PRESETS_VERSION,
       decks: [...DEFAULT_DECKS],
       blockedTerms: [],
       shuffle: false
@@ -304,7 +311,10 @@ function loadState() {
       ...parsed,
       settings: {
         ...createDefaultState().settings,
-        ...(parsed.settings || {})
+        ...(parsed.settings || {}),
+        // 保存済みデータに含まれていた本来のプリセット版数を使う（無ければ0＝旧版扱い）。
+        // これがないと既定値で埋まってしまい、旧端末での自動移行が働かない。
+        presetsVersion: Number(parsed.settings?.presetsVersion || 0)
       }
     });
   } catch {
@@ -330,6 +340,11 @@ function normalizeLoadedState(input) {
   );
   if (!nextState.settings.decks.some((deck) => deckKey(deck) === deckKey(DEFAULT_DECK_NAME))) {
     nextState.settings.decks.unshift(DEFAULT_DECK_NAME);
+  }
+  // 復習間隔プリセットを最新版へ一度だけ移行する。保存済みの端末でも新しい間隔になる。
+  if (Number(nextState.settings.presetsVersion || 0) < PRESETS_VERSION || !Array.isArray(nextState.settings.presets) || nextState.settings.presets.length === 0) {
+    nextState.settings.presets = DEFAULT_PRESETS.map((preset) => ({ ...preset }));
+    nextState.settings.presetsVersion = PRESETS_VERSION;
   }
   nextState.assets = normalizeAssets(nextState.assets);
   return nextState;
