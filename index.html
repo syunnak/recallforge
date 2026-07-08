@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=35" />
+    <link rel="stylesheet" href="styles.css?v=36" />
   </head>
   <body>
     <div class="app-shell">
@@ -28,7 +28,8 @@
 
         <nav class="nav-tabs" aria-label="画面切り替え">
           <button class="nav-tab is-active" data-route="study">学習</button>
-          <button class="nav-tab" data-route="cards">カード</button>
+          <button class="nav-tab" data-route="create">作成</button>
+          <button class="nav-tab" data-route="cards">一覧</button>
           <button class="nav-tab" data-route="settings">設定</button>
         </nav>
 
@@ -72,7 +73,7 @@
               <div class="empty-state">
                 <h3>復習するカードはありません</h3>
                 <p>カードを追加してください。</p>
-                <button class="primary-button" data-route-button="cards">カードを作る</button>
+                <button class="primary-button" data-route-button="create">カードを作る</button>
               </div>
             </article>
 
@@ -106,28 +107,18 @@
           </div>
         </section>
 
-        <section class="view" id="view-cards" aria-labelledby="cardsTitle">
+        <section class="view" id="view-create" aria-labelledby="createTitle">
           <header class="view-header">
             <div>
-              <p class="eyebrow">Library</p>
-              <h2 id="cardsTitle">カード管理</h2>
+              <p class="eyebrow">Create</p>
+              <h2 id="createTitle">カード作成</h2>
             </div>
             <div class="header-actions">
-              <input id="cardSearch" type="search" placeholder="検索" aria-label="カード検索" />
-              <select id="cardSpecialtyFilter" aria-label="診療科でしぼり込み">
-                <option value="all">すべての科</option>
-              </select>
-              <select id="cardSortSelect" aria-label="並び替え">
-                <option value="due">期限が近い順</option>
-                <option value="specialty">診療科順</option>
-                <option value="newest">追加が新しい順</option>
-                <option value="oldest">追加が古い順</option>
-              </select>
-              <button class="primary-button" id="newCardButton">新規カード</button>
+              <button class="ghost-button" type="button" data-route-button="cards">一覧を見る</button>
             </div>
           </header>
 
-          <div class="split-layout cards-layout">
+          <div class="create-layout">
             <section class="editor-panel card-editor-panel" aria-label="カード編集">
               <form id="cardForm">
                 <input type="hidden" id="cardId" />
@@ -168,20 +159,41 @@
                 </div>
               </form>
             </section>
-
-            <section class="list-panel card-list-panel" aria-label="カード一覧">
-              <h3>保存済みカード</h3>
-              <div class="toolbar">
-                <button class="secondary-button" id="autoTagAllButton">全カードに自動タグ</button>
-                <button class="secondary-button" id="exportJsonButton">JSON書き出し</button>
-                <label class="file-button">
-                  取り込み
-                  <input type="file" id="importFile" accept=".json,.csv,text/csv,application/json" />
-                </label>
-              </div>
-              <div class="card-list" id="cardList"></div>
-            </section>
           </div>
+        </section>
+
+        <section class="view" id="view-cards" aria-labelledby="cardsTitle">
+          <header class="view-header">
+            <div>
+              <p class="eyebrow">Library</p>
+              <h2 id="cardsTitle">カード一覧</h2>
+            </div>
+            <div class="header-actions">
+              <input id="cardSearch" type="search" placeholder="検索" aria-label="カード検索" />
+              <select id="cardSpecialtyFilter" aria-label="診療科でしぼり込み">
+                <option value="all">すべての科</option>
+              </select>
+              <select id="cardSortSelect" aria-label="並び替え">
+                <option value="due">期限が近い順</option>
+                <option value="specialty">診療科順</option>
+                <option value="newest">追加が新しい順</option>
+                <option value="oldest">追加が古い順</option>
+              </select>
+              <button class="primary-button" id="newCardButton">新規カード</button>
+            </div>
+          </header>
+
+          <section class="list-panel card-list-panel" aria-label="カード一覧">
+            <div class="toolbar">
+              <button class="secondary-button" id="autoTagAllButton">全カードに自動タグ</button>
+              <button class="secondary-button" id="exportJsonButton">JSON書き出し</button>
+              <label class="file-button">
+                取り込み
+                <input type="file" id="importFile" accept=".json,.csv,text/csv,application/json" />
+              </label>
+            </div>
+            <div class="card-list" id="cardList"></div>
+          </section>
         </section>
 
         <section class="view" id="view-settings" aria-labelledby="settingsTitle">
@@ -287,6 +299,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
     <script src="cloud-config.js"></script>
-    <script src="main.js?v=35"></script>
+    <script src="main.js?v=36"></script>
   </body>
 </html>

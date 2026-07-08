@@ -1,11 +1,11 @@
-const CACHE_NAME = "recallforge-static-v35";
+const CACHE_NAME = "recallforge-static-v36";
 const ASSETS = [
   "./",
   "./index.html",
   "./cloud-config.js",
   "./vendor/supabase.min.js",
-  "./styles.css?v=35",
-  "./main.js?v=35",
+  "./styles.css?v=36",
+  "./main.js?v=36",
   "./manifest.webmanifest",
   "./icon.svg"
 ];

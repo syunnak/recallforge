@@ -242,19 +242,15 @@ textarea {
   align-items: start;
 }
 
-#view-cards .cards-layout {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-#view-cards .card-editor-panel {
+#view-create .card-editor-panel {
   max-width: 1120px;
 }
 
-#view-cards #cardFront {
+#view-create #cardFront {
   min-height: 220px;
 }
 
-#view-cards #cardBack {
+#view-create #cardBack {
   min-height: 300px;
 }
 
@@ -983,7 +979,7 @@ dialog p {
   }
 
   .nav-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .nav-tab {

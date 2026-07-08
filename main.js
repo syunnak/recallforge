@@ -196,7 +196,7 @@ function bindEvents() {
     const card = getCard(currentStudyCardId);
     if (!card) return;
     fillCardForm(card);
-    setRoute("cards");
+    setRoute("create");
   });
 
   els.deleteCurrentCard.addEventListener("click", () => {
@@ -208,6 +208,7 @@ function bindEvents() {
 
   els.newCardButton.addEventListener("click", () => {
     clearCardForm();
+    setRoute("create");
     els.cardFront.focus();
   });
 
@@ -452,10 +453,10 @@ function renderStudy() {
       <div class="empty-state">
         <h3>復習するカードはありません</h3>
         <p>カードを追加してください。</p>
-        <button class="primary-button" data-route-button="cards">カードを作る</button>
+        <button class="primary-button" data-route-button="create">カードを作る</button>
       </div>
     `;
-    els.studyCard.querySelector("[data-route-button]")?.addEventListener("click", () => setRoute("cards"));
+    els.studyCard.querySelector("[data-route-button]")?.addEventListener("click", (event) => setRoute(event.currentTarget.dataset.routeButton));
     return;
   }
 
@@ -615,7 +616,10 @@ function renderCardList() {
     .join("");
 
   els.cardList.querySelectorAll("[data-edit-card]").forEach((button) => {
-    button.addEventListener("click", () => fillCardForm(getCard(button.dataset.editCard)));
+    button.addEventListener("click", () => {
+      fillCardForm(getCard(button.dataset.editCard));
+      setRoute("create");
+    });
   });
   els.cardList.querySelectorAll("[data-delete-card]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -778,8 +782,11 @@ function saveCardFromForm(event) {
     state.cards.push(makeCard({ ...input, tags: autoMergedTags }));
   }
 
+  const wasEditing = Boolean(existing);
   clearCardForm();
   persistAndRender();
+  // 既存カードの編集後は一覧へ戻る。新規作成時は続けて追加できるよう作成画面に留まる。
+  if (wasEditing) setRoute("cards");
   showMessage("保存しました", "カードを保存しました。");
 }
 
